@@ -1,0 +1,14 @@
+{
+  "name": "suivi-flotte",
+  "private": true,
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server start",
+    "seed:demo": "npm --prefix server run seed:demo",
+    "test": "npm --prefix server test",
+    "schema": "python3 scripts/extract_schema.py \"$DOCX\" shared/plan_comptable.json"
+  }
+}

@@ -1,0 +1,133 @@
+{
+  "produits": [
+    {
+      "code": "71210000",
+      "label": "Ventes de Prestations de Transport",
+      "mode": "Km parcourus chargés × Tarif au Km (ou total factures)"
+    },
+    {
+      "code": "71280000",
+      "label": "Surcharges Carburant (Indexation)",
+      "mode": "Complément gazole appliqué sur factures mensuelles"
+    },
+    {
+      "code": "71880000",
+      "label": "Autres Produits d'Exploitation",
+      "mode": "Frais d'attente, immobilisation, manutention annexes"
+    }
+  ],
+  "charges": [
+    {
+      "key": "variables",
+      "titre": "CHARGES VARIABLES",
+      "note": "(Liées au kilométrage du mois)",
+      "comptes": [
+        {
+          "code": "61221000",
+          "label": "Gazole & AdBlue",
+          "mode": "Volume consommé × Prix moyen du litre"
+        },
+        {
+          "code": "61222000",
+          "label": "Pneumatiques",
+          "mode": "Coût d'usure mensuel ou achats de pneus du mois"
+        },
+        {
+          "code": "61330000",
+          "label": "Maintenance & Réparations",
+          "mode": "Vidanges, pièces, entretien remorque et tracteur"
+        },
+        {
+          "code": "61420000",
+          "label": "Péages & Autoroutes",
+          "mode": "Relevé mensuel des badges/cartes télépéage"
+        },
+        {
+          "code": "61430000",
+          "label": "Frais de Route Chauffeur",
+          "mode": "Indemnités repas, découchés et déplacements"
+        }
+      ]
+    },
+    {
+      "key": "fixes",
+      "titre": "CHARGES FIXES",
+      "note": "(Indépendantes des km)",
+      "comptes": [
+        {
+          "code": "61310000",
+          "label": "Loyer Crédit-Bail / LLD",
+          "mode": "Mensualité leasing (Tracteur + Remorque)"
+        },
+        {
+          "code": "61340000",
+          "label": "Assurances",
+          "mode": "Quote-part mensuelle (Flotte, RC, Marchandises)"
+        },
+        {
+          "code": "61455000",
+          "label": "Abonnements GPS & Télécoms",
+          "mode": "Abonnement mensuel de géolocalisation"
+        },
+        {
+          "code": "61610000",
+          "label": "Taxe à l'Essieu & Vignettes",
+          "mode": "Allocation mensuelle (Taxe annuelle / 12)"
+        },
+        {
+          "code": "61710000",
+          "label": "Salaires Conducteurs",
+          "mode": "Salaire fixe net du chauffeur"
+        },
+        {
+          "code": "61740000",
+          "label": "Charges Sociales",
+          "mode": "Cotisations patronales mensuelles (CNSS...)"
+        }
+      ]
+    },
+    {
+      "key": "amortissements",
+      "titre": "AMORTISSEMENTS",
+      "note": "(Si achat au comptant ou crédit classique)",
+      "comptes": [
+        {
+          "code": "61900000",
+          "label": "Amortissement Matériel Roulant",
+          "mode": "Allocation mensuelle (Dotation annuelle / 12)"
+        }
+      ]
+    }
+  ],
+  "resultat": [
+    {
+      "etape": "Total Produits (A)",
+      "formule": "Total des revenus du mois",
+      "montant": "A"
+    },
+    {
+      "etape": "Total Charges (B)",
+      "formule": "Total des charges variables + fixes + dotations",
+      "montant": "B"
+    },
+    {
+      "etape": "RÉSULTAT BRUT MENSUEL",
+      "formule": "Résultat Brut = Total Produits (A) - Total Charges (B)",
+      "montant": "A - B"
+    },
+    {
+      "etape": "Impôt / Taxe sur résultat",
+      "formule": "Estimation de l'impôt mensuel (IS / Cotisation minimale)",
+      "montant": "T"
+    },
+    {
+      "etape": "RÉSULTAT NET MENSUEL",
+      "formule": "Résultat Net = Résultat Brut - Impôt (T)",
+      "montant": "A - B - T"
+    }
+  ],
+  "totaux": {
+    "A": "TOTAL DES PRODUITS MENSUELS",
+    "B": "TOTAL DES CHARGES MENSUELLES"
+  }
+}
