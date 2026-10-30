@@ -11,18 +11,31 @@ const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
 const mockStore = { ...demoSnapshot };
 
-function getMock(path) {
-  if (mockStore[path] !== undefined) return mockStore[path];
-  const cleanPath = path.split('?')[0];
-  if (mockStore[cleanPath] !== undefined) return mockStore[cleanPath];
-  for (const [k, v] of Object.entries(mockStore)) {
-    if (k.split('?')[0] === cleanPath) return v;
+function unwrap(val) {
+  if (val && typeof val === 'object' && Array.isArray(val.value)) {
+    return val.value;
   }
+  return val;
+}
+
+function getMock(path) {
+  const cleanPath = path.split('?')[0];
+
+  if (mockStore[path] !== undefined) return unwrap(mockStore[path]);
+  if (mockStore[cleanPath] !== undefined) return unwrap(mockStore[cleanPath]);
+
+  for (const [k, v] of Object.entries(mockStore)) {
+    if (k.split('?')[0] === cleanPath) return unwrap(v);
+  }
+
   if (cleanPath.startsWith('/entries/')) return { km: 10000, tarifKm: 9.4, litres: 3100, prixLitre: 11, amounts: {}, annuel: {}, modes: {}, impot: { mode: 'auto', montant: 0 } };
-  if (cleanPath.includes('/reports/dashboard')) return mockStore['/reports/dashboard?month=2026-10'] || {};
-  if (cleanPath.includes('/reports/annual')) return mockStore['/reports/annual?year=2026'] || {};
-  if (cleanPath.includes('/reports/semaines')) return mockStore['/reports/semaines'] || {};
-  if (cleanPath.includes('/trucks')) return mockStore['/trucks'] || [];
+  if (cleanPath.includes('/reports/dashboard')) return unwrap(mockStore['/reports/dashboard?month=2026-10'] || {});
+  if (cleanPath.includes('/reports/annual')) return unwrap(mockStore['/reports/annual?year=2026'] || {});
+  if (cleanPath.includes('/reports/semaines')) return unwrap(mockStore['/reports/semaines'] || {});
+  if (cleanPath.includes('/trucks')) return unwrap(mockStore['/trucks'] || []);
+  if (cleanPath.includes('/users')) return unwrap(mockStore['/users'] || []);
+  if (cleanPath.includes('/operations')) return unwrap(mockStore['/operations'] || { items: [], total: 0 });
+
   return Array.isArray(mockStore[cleanPath]) ? [] : {};
 }
 
