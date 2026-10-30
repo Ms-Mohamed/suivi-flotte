@@ -3,7 +3,8 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import mongoose from 'mongoose';
-import { Truck, Entry, Operation, Settings, User } from './models.js';
+import { Truck, Entry, Operation, Plan, Settings, User } from './models.js';
+import { BIZ_MODELS } from './biz/models.js';
 
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
@@ -17,9 +18,10 @@ const pad = (n) => String(n).padStart(2, '0');
 const stamp = (d = new Date()) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 
 async function snapshot() {
-  const [trucks, entries, operations, settings, users] = await Promise.all([Truck, Entry, Operation, Settings, User].map((m) => m.collection.find({}).toArray()));
-  return { app: 'suivi-flotte', version: 2, createdAt: new Date().toISOString(),
-    counts: { camions: trucks.length, saisies: entries.length, operations: operations.length, utilisateurs: users.length }, data: { trucks, entries, operations, settings, users } };
+  const [trucks, entries, operations, plans, settings, users] = await Promise.all([Truck, Entry, Operation, Plan, Settings, User].map((m) => m.collection.find({}).toArray()));
+  const biz = {}; for (const [name, M] of Object.entries(BIZ_MODELS)) biz[name] = await M.collection.find({}).toArray();
+  return { app: 'suivi-flotte', version: 3, createdAt: new Date().toISOString(),
+    counts: { camions: trucks.length, saisies: entries.length, operations: operations.length, plans: plans.length, utilisateurs: users.length, missions: biz.Mission.length, factures: biz.Facture.length, employes: biz.Employe.length }, data: { trucks, entries, operations, plans, settings, users, biz } };
 }
 
 async function uniqueName(suffix) {
@@ -72,9 +74,19 @@ const conv = {
   entries: (x) => ({ ...x, _id: oid(x._id), truck: oid(x.truck), createdAt: dt(x.createdAt), updatedAt: dt(x.updatedAt) }),
   operations: (x) => ({ ...x, _id: oid(x._id), truck: oid(x.truck), createdAt: dt(x.createdAt), updatedAt: dt(x.updatedAt),
     historique: (x.historique || []).map((h) => ({ ...h, at: h.at ? new Date(h.at) : undefined })) }),
+  plans: (x) => ({ ...x, _id: oid(x._id), truck: oid(x.truck), createdAt: dt(x.createdAt), updatedAt: dt(x.updatedAt) }),
   settings: (x) => ({ ...x, _id: oid(x._id), createdAt: dt(x.createdAt), updatedAt: dt(x.updatedAt) }),
 };
-const models = { trucks: Truck, entries: Entry, operations: Operation, settings: Settings };
+const REF_KEYS = new Set(['_id', 'truck', 'client', 'chauffeur', 'sousTraitant', 'vehiculeST', 'facture', 'missions', 'locations', 'mission', 'fournisseur', 'achat', 'employe', 'piece']);
+const ISO_DT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+/** Rétablit ObjectId et Date après le passage par JSON (clés de référence connues uniquement : pas de faux positifs sur des textes). */
+const revive = (v, key) => {
+  if (Array.isArray(v)) return v.map((x) => revive(x, key));
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, revive(x, k)]));
+  if (typeof v === 'string') { if (REF_KEYS.has(key) && /^[0-9a-f]{24}$/i.test(v)) return new mongoose.Types.ObjectId(v); if (ISO_DT.test(v)) return new Date(v); }
+  return v;
+};
+const models = { trucks: Truck, entries: Entry, operations: Operation, plans: Plan, settings: Settings };
 
 async function replaceAll(snap) {
   // on convertit tout AVANT de toucher à la base : une sauvegarde invalide ne détruit rien
@@ -83,6 +95,9 @@ async function replaceAll(snap) {
     await models[k].collection.deleteMany({});
     if (docs[k].length) await models[k].collection.insertMany(docs[k]);
   }
+  // modules métier (clients, missions, factures, RH…) : absents d'une ancienne sauvegarde = base vidée pour rester cohérente
+  const biz = Object.fromEntries(Object.entries(BIZ_MODELS).map(([n]) => [n, (snap.data.biz?.[n] || []).map((x) => revive(x))]));
+  for (const [name, M] of Object.entries(BIZ_MODELS)) { await M.collection.deleteMany({}); if (biz[name].length) await M.collection.insertMany(biz[name]); }
   await Entry.syncIndexes().catch(() => {});
 }
 
@@ -91,7 +106,7 @@ export async function restoreSnapshot(snap) {
   const safety = await createBackup('-avant-restauration');
   try { await replaceAll(snap); }
   catch (e) { await replaceAll(await readBackup(safety.name)); throw Object.assign(new Error(`Restauration annulée, données d'origine remises en place (${e.message})`), { status: 500 }); }
-  return { camions: snap.data.trucks.length, saisies: snap.data.entries.length, operations: (snap.data.operations || []).length, sauvegardeDeSecurite: safety.name };
+  return { camions: snap.data.trucks.length, saisies: snap.data.entries.length, operations: (snap.data.operations || []).length, missions: (snap.data.biz?.Mission || []).length, factures: (snap.data.biz?.Facture || []).length, sauvegardeDeSecurite: safety.name };
 }
 
 export function startBackupScheduler() {

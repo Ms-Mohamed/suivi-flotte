@@ -14,10 +14,12 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:?définissez ADMIN_EMAIL dans .env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?définissez ADMIN_PASSWORD dans .env}
       BACKUP_DIR: /data/backups
+      UPLOAD_DIR: /data/uploads
       BACKUP_HOUR: "2"
       BACKUP_KEEP: "30"
       TZ: Africa/Casablanca
     volumes:
       - ./backups:/data/backups
+      - ./uploads:/data/uploads
 volumes:
   mongo_data:

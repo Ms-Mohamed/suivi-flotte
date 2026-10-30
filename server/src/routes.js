@@ -2,10 +2,13 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
-import { User, Truck, Entry, Operation, Settings, getSettings } from './models.js';
+import { User, Truck, Entry, Operation, Plan, Settings, getSettings } from './models.js';
 import { requireAuth, signToken, check, hash, requireRole, publicUser } from './auth.js';
 import { mountAdmin } from './adminRoutes.js';
+import { mountFleet } from './fleetRoutes.js';
 import { mountOps } from './opsRoutes.js';
+import { mountBiz } from './biz/index.js';
+import { mountReports } from './reportRoutes.js';
 import { opsIndex } from './ops.js';
 import { PLAN, calcEntry, MONTH_RE, prevMonth, addMonths } from '../../shared/calc.js';
 import { monthWorkbook, entryWorkbook } from './exporter.js';
@@ -27,13 +30,16 @@ const entryBody = z.object({
 const truckBody = z.object({
   immatriculation: z.string().trim().min(1).max(30),
   marque: z.string().trim().max(60).default(''), modele: z.string().trim().max(60).default(''),
-  annee: z.number().int().min(1980).max(2100).nullish(), chauffeur: z.string().trim().max(80).default(''),
+  annee: z.number().int().min(1980).max(2100).nullish(), type: z.enum(['camion', 'tracteur', 'remorque', 'autre']).default('camion'), capaciteTonnes: z.number().min(0).max(1000).default(0), nbPlaces: z.number().int().min(0).max(20).default(0), dateMiseEnService: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/, 'Date invalide').default(''), chauffeur: z.string().trim().max(80).default(''), consoTheorique: z.number().min(0).max(200).default(0),
   notes: z.string().max(2000).default(''), actif: z.boolean().default(true),
   defauts: z.object({ amounts: byCode, annuel: byCode, modes: modesSchema, tarifKm: money.default(0), prixLitre: money.default(0) }).default({}),
 });
 const settingsBody = z.object({
   societe: z.string().trim().min(1).max(100), tauxIS: z.number().min(0).max(100),
   cotisationMinimale: z.number().min(0).max(100), cotisationMinimaleActive: z.boolean(),
+  dateBascule: z.string().regex(/^(\d{4}-(0[1-9]|1[0-2]))?$/, 'Mois de bascule invalide (AAAA-MM)').default(''),
+  seuilSurconso: z.number().min(0).max(200).default(10),
+  entreprise: z.object(Object.fromEntries(['adresse', 'ville', 'ice', 'if', 'rc', 'patente', 'cnss', 'telephone', 'email', 'rib', 'banque', 'mentions'].map((k) => [k, z.string().trim().max(k === 'mentions' ? 400 : 120).default('')]))).optional(),
 });
 
 const checkMonth = (req, res, next) => (MONTH_RE.test(req.params.month || req.query.month || '') ? next() : res.status(400).json({ error: 'Mois invalide (format AAAA-MM)' }));
@@ -96,7 +102,7 @@ export function buildRouter() {
     if (req.query.definitif === '1') {
       const t = await Truck.findByIdAndDelete(req.params.id);
       if (!t) return res.status(404).json({ error: 'Camion introuvable' });
-      await Entry.deleteMany({ truck: t._id }); await Operation.deleteMany({ truck: t._id }); return res.json({ ok: true, supprime: true });
+      await Entry.deleteMany({ truck: t._id }); await Operation.deleteMany({ truck: t._id }); await Plan.deleteMany({ truck: t._id }); return res.json({ ok: true, supprime: true });
     }
     const t = await Truck.findByIdAndUpdate(req.params.id, { actif: false }, { new: true });
     return t ? res.json({ ok: true, archive: true }) : res.status(404).json({ error: 'Camion introuvable' });
@@ -110,7 +116,7 @@ export function buildRouter() {
     const e = await Entry.findOne({ truck: truck._id, month: req.params.month });
     const entry = e ? entryView(plain(e)) : await buildTemplate(truck, req.params.month);
     const ops = (await opsIndex({ truck: truck._id, month: req.params.month })).get(`${req.params.month}|${truck._id}`) || { totals: {}, km: 0, n: 0 };
-    res.json({ truck: plain(truck), month: req.params.month, exists: !!e, entry, ops, calc: calcEntry({ ...entry, ops }, settings), updatedAt: e?.updatedAt || null });
+    res.json({ truck: plain(truck), month: req.params.month, exists: !!e, entry, ops, calc: calcEntry({ ...entry, month: req.params.month, ops }, settings), updatedAt: e?.updatedAt || null });
   }));
   r.get('/entries/:truckId/:month/modele', checkTruckId, checkMonth, wrap(async (req, res) => {
     const truck = await Truck.findById(req.params.truckId);
@@ -125,7 +131,7 @@ export function buildRouter() {
       { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true });
     const settings = plain(await getSettings());
     const ops = (await opsIndex({ truck: truck._id, month: req.params.month })).get(`${req.params.month}|${truck._id}`) || { totals: {}, km: 0, n: 0 };
-    res.json({ exists: true, entry: entryView(plain(e)), ops, calc: calcEntry({ ...plain(e), ops }, settings), updatedAt: e.updatedAt });
+    res.json({ exists: true, entry: entryView(plain(e)), ops, calc: calcEntry({ ...plain(e), month: req.params.month, ops }, settings), updatedAt: e.updatedAt });
   }));
   r.delete('/entries/:truckId/:month', requireRole('saisie'), checkTruckId, checkMonth, wrap(async (req, res) => {
     await Entry.deleteOne({ truck: req.params.truckId, month: req.params.month }); res.json({ ok: true });
@@ -145,7 +151,7 @@ export function buildRouter() {
       marge: t.A ? +((t.net / t.A) * 100).toFixed(2) : 0, coutKm: t.km ? +(t.B / t.km).toFixed(2) : 0 });
     const idx = await opsIndex({ month: { $gte: from, $lte: month } });
     const emap = new Map(entries.map((e) => [`${e.month}|${e.truck}`, e]));
-    const calcs = new Map([...new Set([...emap.keys(), ...idx.keys()])].map((k) => [k, calcEntry({ ...(emap.get(k) || {}), ops: idx.get(k) }, settings)]));
+    const calcs = new Map([...new Set([...emap.keys(), ...idx.keys()])].map((k) => [k, calcEntry({ ...(emap.get(k) || {}), month: k.split('|')[0], ops: idx.get(k) }, settings)]));
     const monthCalcs = (m) => trucks.map((t) => calcs.get(`${m}|${t._id}`)).filter(Boolean);
     const rows = trucks.map((t) => { const c = calcs.get(`${month}|${t._id}`); return { truck: t, saisi: emap.has(`${month}|${t._id}`), calc: c || calcEntry({}, settings) }; });
     const trend = [];
@@ -165,7 +171,7 @@ export function buildRouter() {
     const entries = (await Entry.find({ month: { $gte: `${year}-01`, $lte: `${year}-12` } })).map(plain);
     const oidx = await opsIndex({ month: { $gte: `${year}-01`, $lte: `${year}-12` } });
     const emap = new Map(entries.map((e) => [`${e.month}|${e.truck}`, e]));
-    const idx = new Map([...new Set([...emap.keys(), ...oidx.keys()])].map((k) => [k, calcEntry({ ...(emap.get(k) || {}), ops: oidx.get(k) }, settings)]));
+    const idx = new Map([...new Set([...emap.keys(), ...oidx.keys()])].map((k) => [k, calcEntry({ ...(emap.get(k) || {}), month: k.split('|')[0], ops: oidx.get(k) }, settings)]));
     const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
     const rows = trucks.map((t) => {
       const cells = months.map((m) => { const c = idx.get(`${m}|${t._id}`); return c ? { A: c.A, B: c.B, net: c.net } : null; });
@@ -187,7 +193,7 @@ export function buildRouter() {
     const trucks = (await Truck.find({ actif: true }).sort({ immatriculation: 1 })).map(plain);
     const entries = new Map((await Entry.find({ month: req.params.month })).map((e) => [String(e.truck), plain(e)]));
     const oidx = await opsIndex({ month: req.params.month });
-    const rows = trucks.map((truck) => ({ truck, entry: { ...(entries.get(String(truck._id)) || {}), ops: oidx.get(`${req.params.month}|${truck._id}`) } }));
+    const rows = trucks.map((truck) => ({ truck, entry: { ...(entries.get(String(truck._id)) || {}), month: req.params.month, ops: oidx.get(`${req.params.month}|${truck._id}`) } }));
     await sendXlsx(res, await monthWorkbook(req.params.month, rows, settings, settings.societe), `flotte-${req.params.month}.xlsx`);
   }));
   r.get('/export/entry/:truckId/:month', checkTruckId, checkMonth, wrap(async (req, res) => {
@@ -195,9 +201,12 @@ export function buildRouter() {
     if (!truck) return res.status(404).json({ error: 'Camion introuvable' });
     const e = await Entry.findOne({ truck: truck._id, month: req.params.month });
     const ops = (await opsIndex({ truck: truck._id, month: req.params.month })).get(`${req.params.month}|${truck._id}`);
-    await sendXlsx(res, await entryWorkbook(plain(truck), req.params.month, { ...(e ? plain(e) : {}), ops }, plain(await getSettings())), `${truck.immatriculation}-${req.params.month}.xlsx`);
+    await sendXlsx(res, await entryWorkbook(plain(truck), req.params.month, { ...(e ? plain(e) : {}), month: req.params.month, ops }, plain(await getSettings())), `${truck.immatriculation}-${req.params.month}.xlsx`);
   }));
   mountOps(r);
+  mountFleet(r);
+  mountBiz(r);
+  mountReports(r);
   mountAdmin(r);
   return r;
 }

@@ -17,6 +17,9 @@ const truckSchema = new Schema({
   chauffeur: { type: String, default: '', trim: true },
   notes: { type: String, default: '' },
   actif: { type: Boolean, default: true },
+  consoTheorique: { type: Number, default: 0, min: 0, max: 200 },
+  type: { type: String, enum: ['camion', 'tracteur', 'remorque', 'autre'], default: 'camion' },
+  capaciteTonnes: { type: Number, default: 0 }, nbPlaces: { type: Number, default: 0 }, dateMiseEnService: { type: String, default: '' },   // L/100 km de référence (0 = non renseigné)
   // Modèle de saisie : pré-remplit chaque nouveau mois (charges fixes, taxe annuelle, dotation…)
   defauts: {
     amounts: { type: Schema.Types.Mixed, default: {} },
@@ -52,6 +55,8 @@ const operationSchema = new Schema({
   km: { type: Number, default: 0, min: 0 },
   voyage: { type: String, default: '', trim: true },
   note: { type: String, default: '', trim: true },
+  kind: { type: String, enum: ['voyage', 'plein', 'entretien'], default: 'voyage', index: true },
+  meta: { type: Schema.Types.Mixed, default: {} },   // plein : litres, prixLitre, kmCompteur, source… ; entretien : type, categorie, garage, kmCompteur…
   supprime: { type: Boolean, default: false },
   createdBy: { type: String, default: '' },
   historique: [{ _id: false, at: Date, par: String, action: String, avant: Schema.Types.Mixed }],
@@ -63,11 +68,30 @@ const settingsSchema = new Schema({
   tauxIS: { type: Number, default: 20, min: 0, max: 100 },
   cotisationMinimale: { type: Number, default: 0.25, min: 0, max: 100 },
   cotisationMinimaleActive: { type: Boolean, default: true },
+  // Mois (AAAA-MM) à partir duquel produits et charges variables viennent uniquement des opérations datées ('' = jamais)
+  dateBascule: { type: String, default: '', match: /^(\d{4}-(0[1-9]|1[0-2]))?$/ },
+  // Écart de consommation (% au-dessus de la référence du camion) à partir duquel un plein est signalé
+  seuilSurconso: { type: Number, default: 10, min: 0, max: 200 },
+  entreprise: { type: Schema.Types.Mixed, default: {} },   // en-tête des documents : adresse, ICE, IF, RC, patente, CNSS, tél, e-mail, RIB, mentions
+  paie: { type: Schema.Types.Mixed, default: {} },   // taux de paie (CNSS, AMO, plafond, majoration heures sup.)
+}, { timestamps: true });
+
+// Plan d'entretien : une règle par camion (ex. vidange tous les 30 000 km ou 180 jours).
+const planSchema = new Schema({
+  truck: { type: Schema.Types.ObjectId, ref: 'Truck', required: true, index: true },
+  libelle: { type: String, required: true, trim: true, maxlength: 80 },
+  categorie: { type: String, default: 'autre', trim: true },
+  intervalleKm: { type: Number, default: 0, min: 0 },
+  intervalleJours: { type: Number, default: 0, min: 0 },
+  dernierKm: { type: Number, default: 0, min: 0 },
+  dernierDate: { type: String, default: '', match: /^(\d{4}-\d{2}-\d{2})?$/ },
+  actif: { type: Boolean, default: true },
 }, { timestamps: true });
 
 export const User = mongoose.model('User', userSchema);
 export const Truck = mongoose.model('Truck', truckSchema);
 export const Entry = mongoose.model('Entry', entrySchema);
+export const Plan = mongoose.model('Plan', planSchema);
 export const Operation = mongoose.model('Operation', operationSchema);
 export const Settings = mongoose.model('Settings', settingsSchema);
 export const getSettings = async () => (await Settings.findOne({ key: 'main' })) || (await Settings.create({ key: 'main' }));

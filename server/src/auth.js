@@ -40,5 +40,5 @@ export async function ensureAdmin() {
   const pwd = process.env.ADMIN_PASSWORD || (prod ? null : 'admin1234');
   if (!email || !pwd) throw new Error('Définissez ADMIN_EMAIL et ADMIN_PASSWORD pour créer le premier compte');
   await User.create({ email, nom: 'Gestionnaire', role: 'admin', passwordHash: await hash(pwd) });
-  console.log(`[init] compte gestionnaire créé : ${email}${prod ? '' : '  (mot de passe dev : admin1234)'}`);
+  console.log(`[init] compte gestionnaire créé : ${email}${prod ? '' : '  (mot de passe dev : voir ADMIN_PASSWORD)'}`);
 }

@@ -25,7 +25,7 @@ docker compose up -d --build
 ```bash
 npm run install:all
 # MongoDB doit tourner sur 127.0.0.1:27017 (ou définissez MONGODB_URI dans server/.env)
-npm run dev:server          # API sur :4000 (compte dev : admin@flotte.local / admin1234)
+npm run dev:server          # API sur :4000 (compte dev : admin@flotte.local, mot de passe = ADMIN_PASSWORD de server/.env)
 npm run dev:client          # interface sur :5173 (proxy /api)
 npm run seed:demo           # 5 camions × 12 mois de données fictives (efface les données existantes !)
 npm test                    # 31 tests (calcul, API, rôles, import, sauvegardes) — nécessite MongoDB (MONGODB_URI_TEST optionnel)
@@ -48,3 +48,50 @@ npm test                    # 31 tests (calcul, API, rôles, import, sauvegardes
 - Impôt automatique : max(IS × résultat brut positif ; cotisation minimale × produits) — hypothèse à faire valider par le comptable ; la saisie manuelle reste possible.
 - Les montants négatifs (avoirs) sont refusés pour éviter les fautes de frappe.
 - Les tests ont été exécutés contre FerretDB (compatible MongoDB) dans l'environnement de génération ; relancez `npm test` sur votre MongoDB.
+
+## Mois de bascule (Paramètres)
+
+Dans **Paramètres → Mode opérations**, la direction choisit un mois de bascule. À partir de ce mois, les produits et les 5 charges variables viennent **uniquement des opérations datées** (la fiche mensuelle garde les charges fixes, amortissements, taxe annuelle et impôt). Avant ce mois, rien ne change. Vide = jamais. Modifier la date recalcule immédiatement les mois concernés. Si une opération est saisie pour un compte qui a déjà un montant tapé à la main dans la fiche d'un mois non basculé, un avertissement signale le risque de double comptage.
+
+## Semaines et charges fixes
+
+Le tableau **Semaines** (lundi→dimanche) peut répartir les charges fixes + amortissements du mois par jour (case « Répartir les charges fixes »). Il faut une fiche mensuelle pour que les charges fixes apparaissent ; sinon un avertissement s'affiche. Résultat hebdomadaire avant impôt.
+
+## Rapport global
+
+Menu **Rapport global** : période au choix (max 60 mois), comparaison avec la période précédente, classement des camions, charges et produits par poste, trajets, alertes. Impression PDF depuis le navigateur ou export Excel (Synthèse, Par camion, Par mois, Par poste, Trajets). Le mois en cours est provisoire.
+
+## Gasoil (pleins et surconsommation)
+
+Menu **Gasoil** : chaque plein est saisi avec le camion, la date, le **kilométrage du compteur**, les litres, le prix du litre (ou le montant total), le chauffeur, le N° de bon, la source (cuve interne / station externe) et la station. Le montant alimente automatiquement le compte « Gazole & AdBlue » du camion au jour saisi (donc le résultat du camion, les semaines, le rapport global et l'historique).
+
+La consommation est calculée par la méthode **plein à plein** : litres du plein ÷ km parcourus depuis le plein précédent du même camion × 100. Elle est comparée à la **consommation théorique** (champ « Consommation théorique » de la fiche camion, en L/100 km). Statuts : *Normal*, *Surconsommation* (au-dessus de la référence + le seuil réglé dans Paramètres, 10 % par défaut), *Suspect* (valeur incohérente, probablement une faute de saisie), *Non évalué* (premier plein ou kilométrage inférieur au plein précédent) et *Sans référence* (théorique non renseignée). Le surcoût estimé = litres en trop × prix du litre. Limite : la méthode suppose que le réservoir est rempli à chaque plein.
+
+## Maintenance
+
+Menu **Maintenance** : un tableau de bord (coût par mois, camions les plus coûteux, par catégorie, préventif/curatif), la liste des **interventions** (date, camion, type préventive/curative, catégorie, garage, km, montant, description) et les **plans d'entretien** (ex. vidange tous les 30 000 km ou 180 jours). Chaque intervention alimente le compte « Maintenance & Réparations » (ou « Pneumatiques » pour la catégorie pneus) du camion. Une intervention remet à jour les plans de la même catégorie sur ce camion. Alerte « Bientôt » à 15 jours ou 1 000 km de l'échéance, « En retard » au-delà. Le kilométrage actuel d'un camion est le relevé le plus récent (plein ou intervention).
+
+Les pleins et interventions sont stockés comme des opérations datées : ils apparaissent dans le journal (badges « plein » / « entretien »), se corrigent depuis leur page (historique conservé), se suppriment doucement et sont inclus dans les sauvegardes. Les plans d'entretien sont aussi sauvegardés.
+
+## Missions, facturation, caisse (menu Exploitation / Facturation)
+
+- **Missions** : client, BL, trajet, tonnage × prix ou forfait, frais de chargement / déchargement / immobilisation, camion et chauffeur, charges (péages, frais de route…). Une mission **interne « Terminée »** crée automatiquement sa recette et ses charges dans les opérations du camion (donc dans le résultat, les semaines et les rapports) ; elle ne compte jamais deux fois. Une mission **sous-traitée** ne passe pas dans le résultat des camions : sa marge propre = montant client − coût sous-traitant − charges (page Rentabilité).
+- **Factures** : brouillon (modifiable) → **émise** (numéro définitif `F-0001-2026` attribué à l'émission, plus de modification) → règlements (jamais au-delà du reste dû) et **avoirs** (jamais au-delà du TTC). Création depuis des missions/locations terminées, TVA calculée par taux sur la base remisée, montant en lettres, impression / PDF. Les règlements en espèces, les dépenses en espèces et les paies en espèces alimentent la **caisse** automatiquement. Pas de module banque.
+- Devis (convertibles en facture), bons de livraison (depuis une mission), relevé des règlements clients, relevé des missions d'un client, dépenses, rentabilité par mission / client / véhicule.
+- **Coordonnées de l'entreprise** (Paramètres) : adresse, ICE, IF, RC, patente, CNSS, RIB et mentions légales, reprises en en-tête / pied des documents. À faire valider par votre comptable (mentions obligatoires, numérotation, TVA).
+
+## Sous-traitance et achats
+
+- Sous-traitants, véhicules des sous-traitants (matricules), opérations (missions sous-traitées avec marge), **rapport tonnage** par sous-traitant et matricule, suivi des paiements (dû / payé / reste).
+- Fournisseurs, articles & services, achats (lignes, TVA, remise), paiements fournisseurs, relevé des achats.
+
+## RH et paie (administrateur uniquement)
+
+Employés, contrats (alertes de fin de CDD à 30 jours), pointage (y compris en lot), avances (remboursement mensuel déduit à la validation), primes / retenues, et **paie** : générer → saisir l'IR → valider (verrouille le pointage de la période) → payer (caisse si espèces) → bulletin imprimable. Les taux CNSS 4,48 % (plafond 6 000 DHS), AMO 2,26 % et la majoration des heures supplémentaires (25 %) sont modifiables (bouton « Taux »). **Les calculs de paie sont une aide : faites-les valider par votre comptable ; l'IR se saisit à la main.**
+Depuis la page **Gasoil**, une surconsommation (ou une économie) peut être transférée en **retenue (ou prime)** sur la paie du chauffeur.
+
+## Flotte étendue
+
+Documents véhicules (carte grise, assurance, visite technique, vignette…) avec **scan** (PDF/JPG/PNG/WEBP, 10 Mo) et alertes à 30 / 15 / 7 jours ; **disponibilité** (disponible, mission, location, maintenance, documents expirés) ; **calendrier** mensuel ; **locations de camions** (jour / heure / forfait) et rapport des heures ; **pannes** (une panne immobilisante rend le camion indisponible) ; **pièces & stock** avec seuil d'alerte. Fiche camion : type, capacité, places, mise en service.
+
+Les scans sont stockés dans `./uploads` (volume Docker) — **ils ne sont pas inclus dans les sauvegardes de l'application** : copiez ce dossier avec vos sauvegardes. Toutes les autres données (modules ci-dessus compris) sont dans les sauvegardes.

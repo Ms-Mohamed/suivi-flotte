@@ -79,3 +79,47 @@ export async function operationsWorkbook(items, societe) {
   }
   return wb;
 }
+
+/** Rapport de gestion (période) : synthèse, par camion, par mois, par poste, trajets. */
+export async function rapportWorkbook(rep) {
+  const wb = new ExcelJS.Workbook(); wb.creator = rep.parametres.societe;
+  const t = rep.totaux, p = rep.totauxPrecedents;
+  let ws = wb.addWorksheet('Synthèse');
+  ws.columns = [{ width: 38 }, { width: 20 }, { width: 20 }];
+  ws.addRow([`${rep.parametres.societe} — Rapport de gestion`]).font = { bold: true, size: 14 };
+  ws.addRow([`Période : ${rep.from} → ${rep.to} (${rep.nbMois} mois) · généré le ${new Date(rep.genereLe).toLocaleDateString('fr-FR')}`]);
+  ws.addRow([]);
+  head(ws.addRow(['Indicateur', 'Période', `Période précédente (${rep.precedente.from} → ${rep.precedente.to})`]));
+  const lines = [['Produits (A)', t.A, p.A], ['Charges (B)', t.B, p.B], ['Résultat brut', t.brut, p.brut], ['Impôt (T)', t.impot, p.impot], ['Résultat net', t.net, p.net]];
+  for (const [a, x, y] of lines) { const r = ws.addRow([a, x, y]); r.getCell(2).numFmt = MAD; r.getCell(3).numFmt = MAD; if (a === 'Résultat net') bold(r, 'FFE8EEF7'); }
+  ws.addRow(['Marge nette %', t.marge / 100, p.marge / 100]).eachCell((c, i) => { if (i > 1) c.numFmt = '0.00%'; });
+  ws.addRow(['Km (fiches + opérations)', t.km, p.km]); ws.addRow(['Coût au km (DHS)', t.coutKm, p.coutKm]);
+  ws.addRow([]);
+  ws.addRow(['Hypothèses']).font = { bold: true };
+  ws.addRow([`Impôt automatique : max(${rep.parametres.tauxIS} % × résultat brut positif ; ${rep.parametres.cotisationMinimaleActive ? `${rep.parametres.cotisationMinimale} % × produits` : 'cotisation minimale désactivée'}), sauf saisie manuelle.`]);
+  ws.addRow([rep.parametres.dateBascule ? `Mode opérations à partir de ${rep.parametres.dateBascule} (${rep.parametres.moisEnModeOperations} mois de la période concernés).` : 'Mode opérations non activé : fiches mensuelles + opérations additionnées.']);
+  ws.addRow([`Fiches mensuelles manquantes sur la période : ${rep.fichesManquantes.total} (leurs charges fixes ne sont pas comptées).`]);
+
+  ws = wb.addWorksheet('Par camion');
+  ws.columns = [{ width: 16 }, { width: 24 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 10 }, { width: 12 }, { width: 12 }, { width: 14 }, { width: 14 }];
+  head(ws.addRow(['Camion', 'Modèle', 'Produits (A)', 'Charges (B)', 'Résultat net', 'Marge %', 'Km', 'Coût/km', 'Mois en perte', 'Lignes d\'opérations']));
+  for (const c of rep.camions) {
+    const r = ws.addRow([c.truck.immatriculation, `${c.truck.marque} ${c.truck.modele}`.trim(), c.A, c.B, c.net, c.marge / 100, c.km, c.coutKm, c.moisPerte, c.nbOps]);
+    [3, 4, 5].forEach((i) => (r.getCell(i).numFmt = MAD)); r.getCell(6).numFmt = '0.00%';
+  }
+  ws = wb.addWorksheet('Par mois');
+  ws.columns = [{ width: 12 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }];
+  head(ws.addRow(['Mois', 'Produits (A)', 'Charges (B)', 'Impôt (T)', 'Résultat net']));
+  for (const m of rep.trend) { const r = ws.addRow([m.month, m.A, m.B, m.impot, m.net]); [2, 3, 4, 5].forEach((i) => (r.getCell(i).numFmt = MAD)); }
+  ws = wb.addWorksheet('Par poste');
+  ws.columns = [{ width: 12 }, { width: 40 }, { width: 16 }, { width: 18 }];
+  head(ws.addRow(['N° compte', 'Poste', 'Groupe', 'Montant (DHS)']));
+  for (const x of [...rep.produits, ...rep.charges]) { const r = ws.addRow([x.code, x.label, x.groupe, x.montant]); r.getCell(4).numFmt = MAD; }
+  ws = wb.addWorksheet('Trajets');
+  ws.columns = [{ width: 30 }, { width: 10 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 10 }];
+  head(ws.addRow(['Trajet', 'Lignes', 'Recettes', 'Dépenses', 'Solde', 'Km']));
+  for (const x of [...rep.operations.meilleursTrajets, ...rep.operations.pireTrajets.filter((p2) => !rep.operations.meilleursTrajets.some((m) => m.voyage === p2.voyage))]) {
+    const r = ws.addRow([x.voyage, x.lignes, x.produits, x.charges, x.net, x.km]); [3, 4, 5].forEach((i) => (r.getCell(i).numFmt = MAD));
+  }
+  return wb;
+}

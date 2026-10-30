@@ -25,7 +25,8 @@ export function createApp() {
   // eslint-disable-next-line no-unused-vars
   app.use((err, _req, res, _next) => {
     if (err instanceof ZodError) return res.status(400).json({ error: err.issues.map((i) => `${i.path.join('.') || 'donnée'} : ${i.message}`).join(' ; ') });
-    if (err?.code === 11000) return res.status(409).json({ error: 'Cette immatriculation existe déjà' });
+    if (err?.code === 11000) return res.status(409).json({ error: err.keyPattern?.immatriculation ? 'Cette immatriculation existe déjà' : 'Cette valeur existe déjà (doublon)' });
+    if (err?.name === 'CastError') return res.status(400).json({ error: 'Valeur invalide' });
     if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'Fichier trop volumineux' });
     if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'JSON invalide' });
     if (err?.status && err.status < 500) return res.status(err.status).json({ error: err.message });

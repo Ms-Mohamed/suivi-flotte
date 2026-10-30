@@ -26,7 +26,7 @@ export async function download(path, filename) {
 }
 
 export async function upload(path, file) {
-  const res = await fetch(`/api${path}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', Authorization: `Bearer ${getToken()}` }, body: file });
+  const res = await fetch(`/api${path}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', Authorization: `Bearer ${getToken()}`, ...(file?.name ? { 'X-Filename': encodeURIComponent(file.name) } : {}) }, body: file });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && getToken()) onUnauthorized();
   if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);

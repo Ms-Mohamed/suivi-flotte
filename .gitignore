@@ -2,3 +2,7 @@ node_modules
 client/dist
 .env
 *.log
+uploads/
+backups/
+server/backups/
+*.json.gz

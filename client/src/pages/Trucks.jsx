@@ -51,6 +51,7 @@ export default function Trucks() {
                 <div className="tc-top"><Plate>{t.immatriculation}</Plate>{!t.actif && <span className="pill warn">Archivé</span>}</div>
                 <h3>{[t.marque, t.modele].filter(Boolean).join(' ') || 'Camion'}{t.annee ? <small> · {t.annee}</small> : null}</h3>
                 <p className="driver"><User size={15} />{t.chauffeur || 'Aucun chauffeur'}</p>
+                {(t.type && t.type !== 'camion') || t.capaciteTonnes ? <p className="muted small" style={{ margin: '0 0 6px' }}>{{ tracteur: 'Tracteur', remorque: 'Remorque', autre: 'Autre', camion: 'Camion' }[t.type || 'camion']}{t.capaciteTonnes ? ` · ${t.capaciteTonnes} t` : ''}{t.nbPlaces ? ` · ${t.nbPlaces} places` : ''}</p> : null}
                 <div className="tc-result">
                   <span>Résultat net · {monthLong(month)}</span>
                   {!dash ? <b>…</b> : r?.saisi ? <><b className={tone(r.calc.net)}>{dhs(r.calc.net)}</b><span className={`pill ${r.calc.net < 0 ? 'neg' : 'pos'}`}>{n2(r.calc.marge)} %</span></> : <b className="muted">Non saisi</b>}
@@ -72,11 +73,11 @@ export default function Trucks() {
   );
 }
 
-const clean = (t) => ({ immatriculation: t.immatriculation, marque: t.marque, modele: t.modele, annee: t.annee || null, chauffeur: t.chauffeur, notes: t.notes, actif: t.actif, defauts: { amounts: t.defauts?.amounts || {}, annuel: t.defauts?.annuel || {}, modes: t.defauts?.modes || {}, tarifKm: t.defauts?.tarifKm || 0, prixLitre: t.defauts?.prixLitre || 0 } });
+const clean = (t) => ({ immatriculation: t.immatriculation, marque: t.marque, modele: t.modele, annee: t.annee || null, type: t.type || 'camion', capaciteTonnes: t.capaciteTonnes || 0, nbPlaces: t.nbPlaces || 0, dateMiseEnService: t.dateMiseEnService || '', chauffeur: t.chauffeur, consoTheorique: t.consoTheorique || 0, notes: t.notes, actif: t.actif, defauts: { amounts: t.defauts?.amounts || {}, annuel: t.defauts?.annuel || {}, modes: t.defauts?.modes || {}, tarifKm: t.defauts?.tarifKm || 0, prixLitre: t.defauts?.prixLitre || 0 } });
 
 function TruckForm({ truck, onClose, onSaved }) {
   const edit = !!truck._id;
-  const [f, setF] = useState(() => (edit ? clean(truck) : { immatriculation: '', marque: '', modele: '', annee: null, chauffeur: '', notes: '', actif: true, defauts: { amounts: {}, annuel: {}, modes: {}, tarifKm: 0, prixLitre: 0 } }));
+  const [f, setF] = useState(() => (edit ? clean(truck) : { immatriculation: '', marque: '', modele: '', annee: null, type: 'camion', capaciteTonnes: 0, nbPlaces: 0, dateMiseEnService: '', chauffeur: '', consoTheorique: 0, notes: '', actif: true, defauts: { amounts: {}, annuel: {}, modes: {}, tarifKm: 0, prixLitre: 0 } }));
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
   const toast = useToast();
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
@@ -94,9 +95,14 @@ function TruckForm({ truck, onClose, onSaved }) {
         <div className="form-grid">
           <label className="field"><span>Immatriculation *</span><input required value={f.immatriculation} onChange={(e) => set('immatriculation', e.target.value)} placeholder="12345-A-1" autoFocus /></label>
           <label className="field"><span>Chauffeur</span><input value={f.chauffeur} onChange={(e) => set('chauffeur', e.target.value)} /></label>
+          <label className="field"><span>Consommation théorique <small className="muted">(référence constructeur)</small></span><NumInput value={f.consoTheorique} onChange={(v) => set('consoTheorique', v)} suffix="L/100 km" aria-label="Consommation théorique" /></label>
           <label className="field"><span>Marque</span><input value={f.marque} onChange={(e) => set('marque', e.target.value)} placeholder="Volvo" /></label>
           <label className="field"><span>Modèle</span><input value={f.modele} onChange={(e) => set('modele', e.target.value)} placeholder="FH 460" /></label>
           <label className="field"><span>Année</span><input type="number" min="1980" max="2100" value={f.annee || ''} onChange={(e) => set('annee', e.target.value ? Number(e.target.value) : null)} /></label>
+          <label className="field"><span>Type de véhicule</span><select value={f.type} onChange={(e) => set('type', e.target.value)}><option value="camion">Camion</option><option value="tracteur">Tracteur routier</option><option value="remorque">Remorque / semi</option><option value="autre">Autre</option></select></label>
+          <label className="field"><span>Capacité de charge</span><NumInput value={f.capaciteTonnes} onChange={(v) => set('capaciteTonnes', v)} suffix="t" aria-label="Capacité" /></label>
+          <label className="field"><span>Nombre de places</span><input type="number" min="0" max="20" value={f.nbPlaces || ''} onChange={(e) => set('nbPlaces', e.target.value ? Number(e.target.value) : 0)} /></label>
+          <label className="field"><span>Mise en service</span><input type="date" value={f.dateMiseEnService} onChange={(e) => set('dateMiseEnService', e.target.value)} /></label>
         </div>
         <fieldset className="template">
           <legend>Modèle mensuel</legend>

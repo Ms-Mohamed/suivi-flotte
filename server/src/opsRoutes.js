@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { z } from 'zod';
 import { Truck, Entry, Operation, getSettings } from './models.js';
 import { requireRole } from './auth.js';
-import { PLAN, calcEntry, num, r2 } from '../../shared/calc.js';
+import { PLAN, calcEntry, num, r2, addMonths, montantBase, isOpsMonth, OPS_CODES } from '../../shared/calc.js';
 import { opsIndex, validDate, addDays, mondayOf, isoWeek } from './ops.js';
 import { operationsWorkbook } from './exporter.js';
 
@@ -32,7 +32,7 @@ const who = (req) => req.user.nom || req.user.email;
 export const opView = (o, trucks) => ({
   id: String(o._id), truck: trucks?.get(String(o.truck)) || { _id: String(o.truck) }, date: o.date, month: o.month, code: o.code,
   compte: LABELS[o.code]?.label || o.code, type: LABELS[o.code]?.type || 'charge', montant: o.montant, km: o.km || 0, voyage: o.voyage || '', note: o.note || '',
-  supprime: !!o.supprime, createdBy: o.createdBy || '', createdAt: o.createdAt, updatedAt: o.updatedAt, nbModifs: (o.historique || []).filter((h) => h.action === 'modification').length,
+  kind: o.kind || 'voyage', meta: o.meta || {}, supprime: !!o.supprime, createdBy: o.createdBy || '', createdAt: o.createdAt, updatedAt: o.updatedAt, nbModifs: (o.historique || []).filter((h) => h.action === 'modification').length,
 });
 const truckMap = async (ids) => new Map((await Truck.find({ _id: { $in: ids } }).lean()).map((t) => [String(t._id), { _id: String(t._id), immatriculation: t.immatriculation, marque: t.marque, modele: t.modele, chauffeur: t.chauffeur, actif: t.actif }]));
 const totaux = (list) => {
@@ -61,6 +61,15 @@ async function fetchOps(q) {
   return docs;
 }
 
+/** Alerte de double comptage : le compte a déjà un montant saisi à la main dans la fiche du mois, et l'opération s'y ajoute. */
+export async function sheetWarnings(truckId, month, codes) {
+  const settings = plain(await getSettings());
+  const e = await Entry.findOne({ truck: truckId, month }).lean();
+  if (!e) return [];
+  return [...new Set(codes)].filter((c) => !(isOpsMonth(month, settings) && OPS_CODES.includes(c)) && montantBase(e, c) > 0)
+    .map((c) => ({ code: c, compte: LABELS[c]?.label || c, month, montantFiche: montantBase(e, c) }));
+}
+
 export function mountOps(r) {
   const canWrite = requireRole('saisie');
 
@@ -85,7 +94,7 @@ export function mountOps(r) {
     }));
     const created = await Operation.insertMany(docs);
     const trucks = await truckMap([String(truck._id)]);
-    res.status(201).json({ items: created.map((o) => opView(plain(o), trucks)) });
+    res.status(201).json({ items: created.map((o) => opView(plain(o), trucks)), avertissements: await sheetWarnings(truck._id, b.date.slice(0, 7), b.lignes.map((l) => l.code)) });
   }));
 
   r.get('/operations/:id', checkId, wrap(async (req, res) => {
@@ -99,17 +108,20 @@ export function mountOps(r) {
     const b = editBody.parse(req.body);
     const o = await Operation.findById(req.params.id);
     if (!o) return res.status(404).json({ error: 'Opération introuvable' });
+    if (o.meta?.missionId || o.meta?.locationId) return res.status(409).json({ error: 'Cette ligne vient d\u2019une mission ou d\u2019une location : modifiez-la depuis cette page' });
+    if (o.kind && o.kind !== 'voyage') return res.status(409).json({ error: o.kind === 'plein' ? 'Modifiez ce plein depuis la page Gasoil' : 'Modifiez cette intervention depuis la page Maintenance' });
     if (!(await Truck.exists({ _id: b.truck }))) return res.status(404).json({ error: 'Camion introuvable' });
     const avant = snap(o);
     Object.assign(o, { truck: oid(b.truck), date: b.date, month: b.date.slice(0, 7), code: b.code, montant: b.montant, km: b.km, voyage: b.voyage, note: b.note });
     o.historique.push({ at: new Date(), par: who(req), action: 'modification', avant });
     await o.save();
-    res.json(opView(plain(o), await truckMap([String(o.truck)])));
+    res.json({ ...opView(plain(o), await truckMap([String(o.truck)])), avertissements: await sheetWarnings(o.truck, o.month, [o.code]) });
   }));
 
   r.delete('/operations/:id', canWrite, checkId, wrap(async (req, res) => {
     const o = await Operation.findById(req.params.id);
     if (!o) return res.status(404).json({ error: 'Opération introuvable' });
+    if (o.meta?.missionId || o.meta?.locationId) return res.status(409).json({ error: 'Cette ligne vient d\u2019une mission ou d\u2019une location : supprimez-la depuis cette page' });
     if (!o.supprime) { o.supprime = true; o.historique.push({ at: new Date(), par: who(req), action: 'suppression', avant: snap(o) }); await o.save(); }
     res.json({ ok: true });
   }));
@@ -120,31 +132,51 @@ export function mountOps(r) {
     res.json({ ok: true });
   }));
 
-  // ---------- Dashboard hebdomadaire (opérations uniquement : les charges fixes restent mensuelles) ----------
+  // ---------- Dashboard hebdomadaire ----------
+  // net = recettes − dépenses des opérations ; F = charges fixes + amortissements du mois répartis au jour le jour ;
+  // netComplet = net − F (résultat avant impôt de la semaine).
   r.get('/reports/semaines', wrap(async (req, res) => {
     const date = req.query.date || new Date().toISOString().slice(0, 10);
     if (!validDate(date)) return res.status(400).json({ error: 'Date invalide (AAAA-MM-JJ)' });
     const nb = Math.min(26, Math.max(1, parseInt(req.query.nb, 10) || 8));
     const monday = mondayOf(date);
     const starts = Array.from({ length: nb }, (_, i) => addDays(monday, -7 * (nb - 1 - i)));
-    const docs = await Operation.find({ supprime: { $ne: true }, date: { $gte: starts[0], $lte: addDays(monday, 6) } }).lean();
+    const last = addDays(monday, 6);
+    const settings = plain(await getSettings());
+    const docs = await Operation.find({ supprime: { $ne: true }, date: { $gte: starts[0], $lte: last } }).lean();
     const trucksAll = (await Truck.find({}).sort({ immatriculation: 1 }).lean()).map((t) => ({ ...t, _id: String(t._id) }));
-    const cell = () => ({ A: 0, B: 0, km: 0, n: 0 });
-    const grid = new Map(); // `${truck}|${weekStart}`
-    const fleet = new Map(starts.map((s) => [s, cell()]));
+    const months = []; for (let m = starts[0].slice(0, 7); m <= last.slice(0, 7); m = addMonths(m, 1)) months.push(m);
+    const fixes = new Map(); // `${month}|${truck}` -> charges fixes mensuelles (fiche du mois, sans les opérations)
+    for (const e of await Entry.find({ month: { $in: months } }).lean()) {
+      const c = calcEntry({ ...e, month: e.month }, settings);
+      fixes.set(`${e.month}|${e.truck}`, r2(c.sousTotaux.fixes + c.sousTotaux.amortissements));
+    }
+    const dim = (m) => new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)).getUTCDate();
+    const cell = () => ({ A: 0, B: 0, F: 0, km: 0, n: 0, manque: false });
+    const grid = new Map(); const fleet = new Map(starts.map((s) => [s, cell()]));
+    const bump = (k, wk, fn) => { const c = grid.get(k) || cell(); fn(c); fn(fleet.get(wk), true); grid.set(k, c); };
     for (const o of docs) {
       const wk = mondayOf(o.date); if (!fleet.has(wk)) continue;
-      const k = `${o.truck}|${wk}`; const c = grid.get(k) || cell();
-      for (const t of [c, fleet.get(wk)]) { if (LABELS[o.code]?.type === 'produit') t.A += o.montant; else t.B += o.montant; t.km += o.km || 0; t.n += 1; }
-      grid.set(k, c);
+      bump(`${o.truck}|${wk}`, wk, (c) => { if (LABELS[o.code]?.type === 'produit') c.A += o.montant; else c.B += o.montant; c.km += o.km || 0; c.n += 1; });
     }
-    const fin = (c) => ({ A: r2(c.A), B: r2(c.B), net: r2(c.A - c.B), km: r2(c.km), n: c.n });
+    for (const t of trucksAll) {
+      for (const wk of starts) {
+        let F = 0, manque = false;
+        for (let i = 0; i < 7; i++) {
+          const day = addDays(wk, i), m = day.slice(0, 7), v = fixes.get(`${m}|${t._id}`);
+          if (v == null) manque = true; else F += v / dim(m);
+        }
+        if (F > 0) bump(`${t._id}|${wk}`, wk, (c, isFleet) => { c.F += F; if (manque && !isFleet) c.manque = true; });
+        else if (manque && grid.has(`${t._id}|${wk}`)) grid.get(`${t._id}|${wk}`).manque = true;
+      }
+    }
+    const fin = (c) => ({ A: r2(c.A), B: r2(c.B), F: r2(c.F), net: r2(c.A - c.B), netComplet: r2(c.A - c.B - c.F), km: r2(c.km), n: c.n, fixesManquantes: !!c.manque });
     const rows = trucksAll.map((t) => ({ truck: t, cells: starts.map((s) => (grid.has(`${t._id}|${s}`) ? fin(grid.get(`${t._id}|${s}`)) : null)) }))
       .filter((x) => x.truck.actif || x.cells.some(Boolean));
     res.json({
-      semaine: { debut: monday, fin: addDays(monday, 6), ...isoWeek(monday) }, starts, rows,
+      semaine: { debut: monday, fin: last, ...isoWeek(monday) }, starts, rows,
       flotte: starts.map((s) => ({ debut: s, ...isoWeek(s), ...fin(fleet.get(s)) })),
-      courante: rows.map((x) => ({ truck: x.truck, ...(x.cells[nb - 1] || { A: 0, B: 0, net: 0, km: 0, n: 0 }) })),
+      courante: rows.map((x) => ({ truck: x.truck, ...(x.cells[nb - 1] || { A: 0, B: 0, F: 0, net: 0, netComplet: 0, km: 0, n: 0, fixesManquantes: false }) })),
     });
   }));
 
@@ -158,7 +190,7 @@ export function mountOps(r) {
     const emap = new Map(entries.map((e) => [e.month, e]));
     const months = [...new Set([...entries.map((e) => e.month), ...[...idx.keys()].map((k) => k.split('|')[0])])].sort();
     const mois = months.map((m) => {
-      const c = calcEntry({ ...(emap.get(m) || {}), ops: idx.get(`${m}|${truck._id}`) }, settings);
+      const c = calcEntry({ ...(emap.get(m) || {}), month: m, ops: idx.get(`${m}|${truck._id}`) }, settings);
       return { month: m, saisi: emap.has(m), A: c.A, B: c.B, net: c.net, km: c.km, nbOps: c.nbOps };
     });
     let cum = 0; for (const x of mois) { cum = r2(cum + x.net); x.cumul = cum; }

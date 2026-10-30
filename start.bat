@@ -9,6 +9,16 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+if not exist ".env" (
+  echo.
+  echo Premier demarrage : creation du fichier .env avec un mot de passe aleatoire...
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\init-env.ps1"
+  if errorlevel 1 (
+    echo Impossible de creer .env
+    pause
+    exit /b 1
+  )
+)
 docker compose up -d --build
 if errorlevel 1 (
   echo.

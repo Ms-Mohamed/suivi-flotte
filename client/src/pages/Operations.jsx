@@ -91,7 +91,7 @@ export function OpsJournal({ truckId, initial, reloadKey, onChanged }) {
                     <tr key={o.id} className={o.supprime ? 'deleted' : ''}>
                       <td>{fmtDay(o.date)}</td>
                       {!truckId && <td><Link to={`/camion/${o.truck._id}`}><Plate>{o.truck.immatriculation || '—'}</Plate></Link></td>}
-                      <td>{o.compte}{o.nbModifs > 0 && <span className="pill warn" style={{ marginLeft: 6 }}>modifié ×{o.nbModifs}</span>}</td>
+                      <td>{o.compte}{o.kind === 'plein' && <span className="pill info" style={{ marginLeft: 6 }}>plein</span>}{o.kind === 'entretien' && <span className="pill info" style={{ marginLeft: 6 }}>entretien</span>}{o.nbModifs > 0 && <span className="pill warn" style={{ marginLeft: 6 }}>modifié ×{o.nbModifs}</span>}</td>
                       <td className="wrap">{o.voyage || <span className="muted">—</span>}</td>
                       <td className={`r ${o.type === 'produit' ? 'pos' : ''}`}>{o.type === 'produit' ? '+' : '−'} {n2(o.montant)}</td>
                       <td className="r">{o.km ? n0(o.km) : ''}</td>
@@ -99,7 +99,9 @@ export function OpsJournal({ truckId, initial, reloadKey, onChanged }) {
                       {canEdit && (
                         <td><div className="act">
                           {o.supprime ? <button className="icon-btn" title="Restaurer" aria-label="Restaurer" onClick={() => restore(o)}><Undo2 size={16} /></button> : (<>
-                            <button className="icon-btn" title="Modifier / historique" aria-label="Modifier" onClick={() => setForm({ edit: o })}><Pencil size={16} /></button>
+                            {o.kind && o.kind !== 'voyage'
+                              ? <Link className="icon-btn" title={o.kind === 'plein' ? 'Modifier depuis la page Gasoil' : 'Modifier depuis la page Maintenance'} aria-label="Modifier" to={o.kind === 'plein' ? '/gasoil' : '/maintenance'}><Pencil size={16} /></Link>
+                              : <button className="icon-btn" title="Modifier / historique" aria-label="Modifier" onClick={() => setForm({ edit: o })}><Pencil size={16} /></button>}
                             <button className="icon-btn" title="Supprimer" aria-label="Supprimer" onClick={() => del(o)}><Trash2 size={16} /></button></>)}
                         </div></td>
                       )}

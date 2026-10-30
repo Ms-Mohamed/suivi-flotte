@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { PLAN, calcEntry, CODE_VENTES, CODE_GAZOLE, CODES_ANNUELS, MONTH_RE } from '../../shared/calc.js';
+import { PLAN, calcEntry, CODE_VENTES, CODE_GAZOLE, CODES_ANNUELS, MONTH_RE, isOpsMonth } from '../../shared/calc.js';
 import { Truck, Entry } from './models.js';
 
 const ACCOUNTS = [...PLAN.produits, ...PLAN.charges.flatMap((g) => g.comptes)];
@@ -133,6 +133,7 @@ export async function runImport(rows, { creerCamions = false, ecraser = false, s
       else {
         const existing = truck._id ? await Entry.findOne({ truck: truck._id, month: r.month }) : null;
         const c = calcEntry(r.entry, settings);
+        if (isOpsMonth(r.month, settings)) res.messages.push('mois en mode opérations (après la date de bascule) : produits et charges variables de cette ligne ne compteront pas, seules les charges fixes sont prises en compte');
         Object.assign(res, { A: c.A, B: c.B, net: c.net, camionNouveau: !!truck.nouveau || created.has(k) });
         if (existing && !ecraser) { res.statut = 'ignore'; res.messages.push('mois déjà saisi (conservé)'); }
         else {

@@ -42,19 +42,20 @@ export default function OperationForm({ trucks, initial = {}, edit, onClose, onS
 
   useEffect(() => { if (edit) api(`/operations/${edit.id}`).then((r) => setHist(r.historique)).catch(() => {}); }, [edit]);
 
+  const warn = (list = []) => list.forEach((w) => toast(`Attention : « ${w.compte} » a déjà ${n2(w.montantFiche)} DHS dans la fiche de ${w.month}. L’opération s’y ajoute : vérifiez qu’il n’y a pas de double comptage.`, 'err'));
   const submit = async (keepOpen) => {
     if (!f.truck) return toast('Choisissez le camion', 'err');
     setBusy(true);
     try {
       if (edit) {
-        await api(`/operations/${edit.id}`, { method: 'PUT', body: { truck: f.truck, date: f.date, code: f.code, montant: f.montant, km: f.km || 0, voyage: f.voyage, note: f.note } });
-        toast('Opération modifiée (l’ancienne valeur reste dans l’historique)');
+        const r = await api(`/operations/${edit.id}`, { method: 'PUT', body: { truck: f.truck, date: f.date, code: f.code, montant: f.montant, km: f.km || 0, voyage: f.voyage, note: f.note } });
+        toast('Opération modifiée (l’ancienne valeur reste dans l’historique)'); warn(r.avertissements);
       } else {
         const ls = lines.filter((l) => l.montant > 0).map((l) => ({ code: l.code, montant: l.montant }));
         if (!ls.length) { setBusy(false); return toast('Saisissez au moins un montant', 'err'); }
-        await api('/operations', { method: 'POST', body: { truck: f.truck, date: f.date, voyage: f.voyage, km: f.km || 0, note: f.note, lignes: ls } });
+        const r = await api('/operations', { method: 'POST', body: { truck: f.truck, date: f.date, voyage: f.voyage, km: f.km || 0, note: f.note, lignes: ls } });
         saveLast({ truck: f.truck, date: f.date });
-        toast(`${ls.length} ligne${ls.length > 1 ? 's' : ''} enregistrée${ls.length > 1 ? 's' : ''}`);
+        toast(`${ls.length} ligne${ls.length > 1 ? 's' : ''} enregistrée${ls.length > 1 ? 's' : ''}`); warn(r.avertissements);
       }
       await onSaved?.();
       if (keepOpen) { setLines(presets()); setF((x) => ({ ...x, voyage: '', km: 0, note: '' })); } else onClose();

@@ -15,7 +15,12 @@ export const num = (v) => {
 };
 export const r2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-export const DEFAULT_SETTINGS = { tauxIS: 20, cotisationMinimale: 0.25, cotisationMinimaleActive: true };
+export const DEFAULT_SETTINGS = { tauxIS: 20, cotisationMinimale: 0.25, cotisationMinimaleActive: true, dateBascule: '' };
+
+/** Comptes alimentés par les opérations datées à partir du mois de bascule : produits + charges variables. */
+export const OPS_CODES = [...PLAN.produits.map((p) => p.code), ...PLAN.charges.filter((g) => g.key === 'variables').flatMap((g) => g.comptes.map((c) => c.code))];
+/** Vrai si le mois (AAAA-MM) est en « mode opérations » (mois ≥ mois de bascule défini dans les paramètres). */
+export const isOpsMonth = (month, settings = {}) => !!(settings.dateBascule && month && month >= settings.dateBascule);
 
 /** Montant saisi dans la fiche mensuelle (hors opérations datées), selon le mode choisi. */
 export function montantBase(entry, code) {
@@ -37,14 +42,17 @@ export function montantCompte(entry, code) {
 
 export function calcEntry(entry = {}, settings = {}) {
   const s = { ...DEFAULT_SETTINGS, ...settings };
+  // Mode opérations : produits et charges variables viennent uniquement des opérations datées (la saisie mensuelle de ces comptes est ignorée).
+  const opsMode = isOpsMonth(entry.month, s);
+  const montant = (e, code) => (opsMode && OPS_CODES.includes(code) ? montantOps(e, code) : montantCompte(e, code));
   const lignes = {};
   let A = 0;
-  for (const p of PLAN.produits) { lignes[p.code] = montantCompte(entry, p.code); A += lignes[p.code]; }
+  for (const p of PLAN.produits) { lignes[p.code] = montant(entry, p.code); A += lignes[p.code]; }
   const sous = {};
   let B = 0;
   for (const g of PLAN.charges) {
     sous[g.key] = 0;
-    for (const c of g.comptes) { lignes[c.code] = montantCompte(entry, c.code); sous[g.key] += lignes[c.code]; }
+    for (const c of g.comptes) { lignes[c.code] = montant(entry, c.code); sous[g.key] += lignes[c.code]; }
     sous[g.key] = r2(sous[g.key]); B += sous[g.key];
   }
   A = r2(A); B = r2(B);
@@ -56,11 +64,11 @@ export function calcEntry(entry = {}, settings = {}) {
   const impot = manuel ? r2(num(entry.impot.montant)) : impotAuto;
   const net = r2(brut - impot);
   // Les km des opérations s'ajoutent aux km de la fiche pour les ratios (ils ne servent jamais au calcul « km × tarif »).
-  const km = r2(num(entry.km) + num(entry.ops?.km)), litres = num(entry.litres);
+  const km = r2((opsMode ? 0 : num(entry.km)) + num(entry.ops?.km)), litres = opsMode ? 0 : num(entry.litres);
   return {
     lignes,
     opsLignes: Object.fromEntries(Object.keys(lignes).map((k) => [k, montantOps(entry, k)])),
-    nbOps: num(entry.ops?.n), A, B, sousTotaux: sous, brut, impot, impotAuto, impotMode: manuel ? 'manuel' : 'auto', net,
+    nbOps: num(entry.ops?.n), opsMode, A, B, sousTotaux: sous, brut, impot, impotAuto, impotMode: manuel ? 'manuel' : 'auto', net,
     marge: A ? r2((net / A) * 100) : 0,
     coutKm: km ? r2(B / km) : 0,
     margeKm: km ? r2(net / km) : 0,

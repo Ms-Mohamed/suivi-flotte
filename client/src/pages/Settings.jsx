@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Save, KeyRound, Percent, DatabaseBackup, Download, RotateCcw, Trash2, Upload } from 'lucide-react';
+import { Save, KeyRound, Percent, CalendarClock, DatabaseBackup, Download, RotateCcw, Trash2, Upload, Fuel, Building2 } from 'lucide-react';
 import { api, download, upload } from '../api.js';
 import { useApp } from '../App.jsx';
 import { NumInput, Modal, useToast } from '../components.jsx';
 import { fmtSize, fmtDateTime } from '../format.js';
 
+const ENT = { adresse: '', ville: '', telephone: '', email: '', ice: '', if: '', rc: '', patente: '', cnss: '', banque: '', rib: '', mentions: '' };
+const ENT_LABELS = [['adresse', 'Adresse'], ['ville', 'Ville'], ['telephone', 'Téléphone'], ['email', 'E-mail'], ['ice', 'ICE'], ['if', 'Identifiant fiscal (IF)'], ['rc', 'RC'], ['patente', 'Patente'], ['cnss', 'N° CNSS employeur'], ['banque', 'Banque'], ['rib', 'RIB']];
+
 export default function Settings() {
   const { settings, setSettings, user } = useApp();
-  const [f, setF] = useState({ societe: settings.societe, tauxIS: settings.tauxIS, cotisationMinimale: settings.cotisationMinimale, cotisationMinimaleActive: settings.cotisationMinimaleActive });
+  const [f, setF] = useState({ societe: settings.societe, tauxIS: settings.tauxIS, cotisationMinimale: settings.cotisationMinimale, cotisationMinimaleActive: settings.cotisationMinimaleActive, dateBascule: settings.dateBascule || '', seuilSurconso: settings.seuilSurconso ?? 10, entreprise: { ...ENT, ...(settings.entreprise || {}) } });
   const [pw, setPw] = useState({ actuel: '', nouveau: '' });
   const toast = useToast();
   const save = async (e) => { e.preventDefault(); try { setSettings(await api('/settings', { method: 'PUT', body: f })); toast('Paramètres enregistrés — tous les résultats sont recalculés'); } catch (x) { toast(x.message, 'err'); } };
@@ -24,6 +27,33 @@ export default function Settings() {
         </div>
         <label className="check"><input type="checkbox" checked={f.cotisationMinimaleActive} onChange={(e) => setF({ ...f, cotisationMinimaleActive: e.target.checked })} />Appliquer la cotisation minimale comme plancher d’impôt</label>
         <p className="muted small">Estimation de l’impôt T = max (IS × résultat brut positif ; cotisation minimale × produits). Vous pouvez aussi saisir T à la main sur chaque situation mensuelle. Faites valider ces taux par votre comptable.</p>
+        <div className="modal-foot"><button className="btn primary"><Save size={17} />Enregistrer</button></div>
+      </form>
+      <form className="card form" onSubmit={save}>
+        <div className="card-head"><h3><Building2 size={18} />Coordonnées de l’entreprise (en-tête des factures)</h3></div>
+        <div className="form-grid">
+          {ENT_LABELS.map(([k, l]) => <label className="field" key={k}><span>{l}</span><input value={f.entreprise[k]} onChange={(e) => setF({ ...f, entreprise: { ...f.entreprise, [k]: e.target.value } })} /></label>)}
+          <label className="field span2"><span>Mentions en bas de page (pénalités de retard, conditions…)</span><textarea rows={2} value={f.entreprise.mentions} onChange={(e) => setF({ ...f, entreprise: { ...f.entreprise, mentions: e.target.value } })} /></label>
+        </div>
+        <p className="muted small" style={{ margin: 0 }}>Ces informations apparaissent sur les devis, factures, avoirs, bons de livraison, bulletins de paie et relevés imprimés. Vérifiez les mentions légales obligatoires avec votre comptable.</p>
+        <div className="modal-foot"><button className="btn primary"><Save size={17} />Enregistrer</button></div>
+      </form>
+      <form className="card form" onSubmit={save}>
+        <div className="card-head"><h3><CalendarClock size={18} />Mode opérations — mois de bascule</h3></div>
+        <p className="muted small" style={{ margin: 0 }}>À partir de ce mois, les <b>recettes</b> et les <b>charges variables</b> (gazole, pneus, maintenance, péages, frais de route) viennent <b>uniquement des opérations datées</b> : la saisie mensuelle de ces postes est ignorée, ce qui évite de compter deux fois. Les charges fixes, la taxe annuelle, l’amortissement et l’impôt restent saisis dans la fiche du mois. Les mois précédents ne changent pas.</p>
+        <label className="field"><span>Premier mois en mode opérations</span>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <input type="month" value={f.dateBascule} onChange={(e) => setF({ ...f, dateBascule: e.target.value })} style={{ maxWidth: 220 }} />
+            {f.dateBascule && <button type="button" className="chip-btn" onClick={() => setF({ ...f, dateBascule: '' })}>Désactiver</button>}
+          </div></label>
+        <p className="muted small" style={{ margin: 0 }}>{f.dateBascule ? `Actif à partir de ${f.dateBascule}. Attention : modifier cette date recalcule immédiatement tous les mois concernés.` : 'Désactivé : les fiches mensuelles et les opérations sont additionnées (attention au double comptage).'}</p>
+        <div className="modal-foot"><button className="btn primary"><Save size={17} />Enregistrer</button></div>
+      </form>
+      <form className="card form" onSubmit={save}>
+        <div className="card-head"><h3><Fuel size={18} />Gasoil — seuil de surconsommation</h3></div>
+        <label className="field"><span>Écart toléré par rapport à la consommation théorique du camion</span>
+          <NumInput value={f.seuilSurconso} onChange={(v) => setF({ ...f, seuilSurconso: Math.min(200, v) })} suffix="%" aria-label="Seuil de surconsommation" /></label>
+        <p className="muted small" style={{ margin: 0 }}>Un plein est signalé « surconsommation » quand sa consommation (L/100 km, méthode plein à plein) dépasse la référence du camion de plus de ce pourcentage. La référence se renseigne sur la fiche de chaque camion.</p>
         <div className="modal-foot"><button className="btn primary"><Save size={17} />Enregistrer</button></div>
       </form>
       <Backups />

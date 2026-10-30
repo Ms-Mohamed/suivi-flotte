@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Download, Printer, Copy, Check, Loader2, AlertCircle, Info, Save, Plus, ClipboardList, History } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { api, download } from '../api.js';
-import { PLAN, calcEntry, CODE_VENTES, CODE_GAZOLE, CODES_ANNUELS, MONTH_RE, currentMonth } from '../../../shared/calc.js';
+import { PLAN, calcEntry, CODE_VENTES, CODE_GAZOLE, CODES_ANNUELS, OPS_CODES, MONTH_RE, currentMonth } from '../../../shared/calc.js';
 import { useApp } from '../App.jsx';
 import { MonthPicker, NumInput, Segmented, Plate, Spinner, useToast } from '../components.jsx';
 import { dhs, n0, n2, monthLong, tone } from '../format.js';
@@ -58,7 +58,7 @@ export default function Statement() {
   const setAnnuel = (code, v) => edit((e) => ({ ...e, annuel: { ...e.annuel, [code]: v } }));
   const setMode = (code, m) => edit((e) => ({ ...e, modes: { ...e.modes, [code]: m } }));
 
-  const c = useMemo(() => (entry && settings ? calcEntry({ ...entry, ops }, settings) : null), [entry, ops, settings]);
+  const c = useMemo(() => (entry && settings ? calcEntry({ ...entry, month, ops }, settings) : null), [entry, ops, settings, month]);
   useEffect(() => { api('/trucks').then(setTrucks).catch(() => {}); }, []);
   if (!entry || !c || !info) return <div className="page"><div className="center"><Spinner /></div></div>;
   const { truck } = info;
@@ -107,12 +107,14 @@ export default function Statement() {
         <fieldset className="plain stmt-main" disabled={!canEdit}>
           <section className="card">
             <div className="card-head"><h3>Activité du mois</h3><span className="muted">Alimente automatiquement les ventes et le gazole</span></div>
-            <div className="activity">
+            {c.opsMode ? (
+              <div className="alert info" style={{ margin: 0 }}><Info size={18} /><div><strong>Mode opérations depuis {settings.dateBascule}.</strong> Les recettes et les charges variables de ce mois viennent uniquement des opérations datées ({ops.n} ligne{ops.n > 1 ? 's' : ''}{ops.km ? `, ${n0(ops.km)} km` : ''}) : km, tarif, gazole et montants saisis à la main ne comptent plus. Saisissez ici les charges fixes, la taxe annuelle, l’amortissement et l’impôt.</div></div>
+            ) : (<div className="activity">
               <Field label="Km parcourus chargés"><NumInput value={entry.km} onChange={(v) => setField('km', v)} suffix="km" aria-label="Km parcourus chargés" /></Field>
               <Field label="Tarif au km"><NumInput value={entry.tarifKm} onChange={(v) => setField('tarifKm', v)} suffix="DHS/km" aria-label="Tarif au km" /></Field>
               <Field label="Gazole consommé"><NumInput value={entry.litres} onChange={(v) => setField('litres', v)} suffix="L" aria-label="Gazole consommé" /></Field>
               <Field label="Prix moyen du litre"><NumInput value={entry.prixLitre} onChange={(v) => setField('prixLitre', v)} suffix="DHS/L" aria-label="Prix moyen du litre" /></Field>
-            </div>
+            </div>)}
           </section>
 
           <section className="card no-print">
@@ -226,7 +228,9 @@ function AccountRow({ acc, entry, calc, api: a }) {
   const opsPart = calc.opsLignes?.[code] || 0;
   const base = Math.round((calc.lignes[code] - opsPart) * 100) / 100;   // montant de la fiche, hors opérations datées
   let ctl;
-  if (code === CODE_VENTES) {
+  if (calc.opsMode && OPS_CODES.includes(code)) {
+    ctl = <><NumInput readOnly value={calc.lignes[code]} suffix="DHS" aria-label={acc.label} /><small className="hint">issu des opérations du mois</small></>;
+  } else if (code === CODE_VENTES) {
     const m = modes[code] === 'factures' ? 'factures' : 'calcul';
     ctl = (<>
       <Segmented label="Mode ventes" value={m} onChange={(v) => a.setMode(code, v)} options={[{ value: 'calcul', label: 'Km × tarif' }, { value: 'factures', label: 'Total factures' }]} />
@@ -254,7 +258,7 @@ function AccountRow({ acc, entry, calc, api: a }) {
     <div className="acc-row">
       <span className="code">{code}</span>
       <div className="acc-name"><b>{acc.label}</b><small>{acc.mode}</small>
-        {opsPart > 0 && <small className="ops-badge"><ClipboardList size={12} /> dont {n2(opsPart)} DHS d’opérations datées</small>}</div>
+        {opsPart > 0 && !calc.opsMode && <small className="ops-badge"><ClipboardList size={12} /> dont {n2(opsPart)} DHS d’opérations datées</small>}</div>
       <div className="acc-ctl">{ctl}</div>
       <b className="amt">{n2(calc.lignes[code])}</b>
     </div>
