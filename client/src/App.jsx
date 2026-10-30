@@ -27,6 +27,8 @@ import { ROLE_LABEL } from './format.js';
 const AppCtx = createContext(null);
 export const useApp = () => useContext(AppCtx);
 
+export const DEMO_USER = { id: 'demo', email: 'demo@flotte.local', nom: 'Visiteur (Démo)', role: 'admin', actif: true };
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [settings, setSettings] = useState(null);
@@ -37,10 +39,28 @@ export default function App() {
   useEffect(() => { setUnauthorizedHandler(logout); }); // eslint-disable-line
   useEffect(() => {
     (async () => {
-      if (getToken()) {
-        try { const [{ user }, s] = await Promise.all([api('/auth/me'), api('/settings')]); setUser(user); setSettings(s); } catch { setToken(null); }
+      try {
+        let u = null;
+        if (getToken()) {
+          try {
+            const res = await api('/auth/me');
+            u = res.user;
+          } catch {
+            setToken(null);
+          }
+        }
+        // Mode démo par défaut : accès direct sans mot de passe
+        if (!u) {
+          u = DEMO_USER;
+        }
+        setUser(u);
+        const s = await api('/settings').catch(() => null);
+        setSettings(s);
+      } catch {
+        setUser(DEMO_USER);
+      } finally {
+        setReady(true);
       }
-      setReady(true);
     })();
   }, []);
 

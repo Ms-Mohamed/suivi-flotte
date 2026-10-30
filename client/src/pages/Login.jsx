@@ -31,6 +31,14 @@ export default function Login({ onLogin }) {
         <label className="field"><span>Mot de passe</span><input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
         {err && <div className="form-error" role="alert">{err}</div>}
         <button className="btn primary block" disabled={busy}><LogIn size={18} />{busy ? 'Connexion…' : 'Se connecter'}</button>
+        <button
+          type="button"
+          className="btn secondary block"
+          style={{ marginTop: '0.75rem' }}
+          onClick={() => onLogin('demo-token', { id: 'demo', email: 'demo@flotte.local', nom: 'Visiteur (Démo)', role: 'admin', actif: true })}
+        >
+          Accéder à la démo (sans mot de passe)
+        </button>
       </form>
     </div>
   );
