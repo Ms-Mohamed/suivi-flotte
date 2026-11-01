@@ -9,9 +9,10 @@ import { mountCrud } from './crud.js';
 import { wrap, plain, who, httpError, isId, today, zDate, zDateOpt, zId, zIdOpt, zMoney, zAmount, zText, zTva } from './util.js';
 import { DocumentVehicule, Mission, Location, Panne, Piece, MouvementPiece, Client, Employe, PrimeRetenue, Bulletin, nextNumber } from './models.js';
 import { validDate, addDays } from '../ops.js';
+import { putFile, getFile, delFile, uploadDir } from './fileStore.js';
 
 export const DOC_TYPES = { carte_grise: 'Carte grise', assurance: 'Assurance', vignette: 'Vignette', visite_technique: 'Visite technique', carte_autorisation: "Carte d'autorisation", permis: 'Permis / agrément', autre: 'Autre' };
-export const uploadDir = () => path.resolve(process.env.UPLOAD_DIR || './uploads');
+export { uploadDir };
 const EXT_MIME = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 
 const daysBetween = (a, b) => Math.round((new Date(`${b}T00:00:00Z`) - new Date(`${a}T00:00:00Z`)) / 864e5);
@@ -41,7 +42,7 @@ export function mountFleetExtra(r) {
   // ---------- Documents véhicules ----------
   const docBody = z.object({ truck: zId, type: z.string().refine((t) => DOC_TYPES[t], 'Type de document inconnu'), numero: zText(60), dateEmission: zDateOpt, dateExpiration: zDateOpt, observation: zText(500) })
     .superRefine((b, ctx) => { if (b.dateEmission && b.dateExpiration && b.dateExpiration < b.dateEmission) ctx.addIssue({ code: 'custom', path: ['dateExpiration'], message: "L'expiration précède l'émission" }); });
-  const rmFile = async (d) => { if (d.fichier?.chemin) await fs.unlink(path.join(uploadDir(), d.fichier.chemin)).catch(() => {}); };
+  const rmFile = async (d) => { if (d.fichier?.chemin) await delFile(d.fichier.chemin); };
   mountCrud(r, { path: '/documents-vehicules', Model: DocumentVehicule, body: docBody, populate: [truckPop], sort: { dateExpiration: 1 }, filters: ['truck', 'type'],
     search: ['numero', 'type', 'truck.immatriculation', 'observation'],
     view: (d) => ({ ...d, ...docStatut(d), typeLabel: DOC_TYPES[d.type] || d.type, aFichier: !!d.fichier?.chemin }),
@@ -59,17 +60,16 @@ export function mountFleetExtra(r) {
     const head = req.body.subarray(0, 4).toString('latin1');
     const ok = (ext === 'pdf' && head.startsWith('%PDF')) || (['jpg', 'jpeg'].includes(ext) && req.body[0] === 0xff && req.body[1] === 0xd8) || (ext === 'png' && head.startsWith('\x89PNG')) || (ext === 'webp' && head === 'RIFF');
     if (!ok) throw httpError(400, 'Le contenu du fichier ne correspond pas à son format');
-    await fs.mkdir(uploadDir(), { recursive: true }); await rmFile(d);
-    const chemin = `${d._id}-${Date.now()}.${ext}`; await fs.writeFile(path.join(uploadDir(), chemin), req.body);
+    await rmFile(d);
+    const chemin = `${d._id}-${Date.now()}.${ext}`; await putFile(chemin, req.body);
     d.fichier = { nom, mime: EXT_MIME[ext], taille: req.body.length, chemin }; await d.save();
     res.json({ ok: true, fichier: { nom, taille: req.body.length } });
   }));
   r.get('/documents-vehicules/:id/fichier', wrap(async (req, res) => {
     if (!isId(req.params.id)) throw httpError(400, 'Identifiant invalide');
     const d = await DocumentVehicule.findById(req.params.id).lean(); if (!d?.fichier?.chemin) throw httpError(404, 'Aucun fichier');
-    const file = path.join(uploadDir(), path.basename(d.fichier.chemin));
     res.setHeader('Content-Type', d.fichier.mime); res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Content-Disposition', `inline; filename="${d.fichier.nom.replace(/"/g, '')}"`);
-    res.send(await fs.readFile(file).catch(() => { throw httpError(404, 'Fichier introuvable sur le serveur'); }));
+    res.send(await getFile(d.fichier.chemin).catch(() => { throw httpError(404, 'Fichier introuvable sur le serveur'); }));
   }));
   r.delete('/documents-vehicules/:id/fichier', canWrite, wrap(async (req, res) => {
     const d = await DocumentVehicule.findById(req.params.id); if (!d) throw httpError(404, 'Document introuvable');

@@ -10,5 +10,21 @@
     "seed:demo": "npm --prefix server run seed:demo",
     "test": "npm --prefix server test",
     "schema": "python3 scripts/extract_schema.py \"$DOCX\" shared/plan_comptable.json"
-  }
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.5.0",
+    "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "module"
 }

@@ -356,3 +356,6 @@ input[type=date]{background:var(--card);border:1px solid var(--line);border-radi
 .modal:has(.doc-lines){max-width:1040px}
 .tbl td.wrapc{white-space:normal;vertical-align:middle}
 .tbl td.wrapc small{white-space:normal}
+.login-card{position:relative}
+
+.demo-banner { background: #fff7e0; color: #7a5200; border: 1px solid #f0d58a; border-radius: 8px; padding: 8px 14px; margin: 0 0 14px; font-size: 13px; font-weight: 600; }

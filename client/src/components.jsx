@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, createContext, useContext, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, X, CheckCircle2, AlertCircle, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { addMonths, currentMonth } from '../../shared/calc.js';
-import { monthLong, parseNum, n0 } from './format.js';
+import { monthLong, parseNum, n0, DEC } from './format.js';
 
 /* ---------- Toasts ---------- */
 const ToastCtx = createContext(() => {});
@@ -45,17 +45,17 @@ export const Plate = ({ children }) => <span className="plate"><i />{children}</
 
 /* ---------- Nombre saisi (accepte la virgule) ---------- */
 export function NumInput({ value, onChange, suffix, placeholder = '0', readOnly, id, width, 'aria-label': aria }) {
-  const [txt, setTxt] = useState(value ? String(value).replace('.', ',') : '');
+  const [txt, setTxt] = useState(value ? String(value).replace('.', DEC) : '');
   const last = useRef(value);
   useEffect(() => {
-    if (value !== last.current && parseNum(txt) !== value) setTxt(value ? String(value).replace('.', ',') : '');
+    if (value !== last.current && parseNum(txt) !== value) setTxt(value ? String(value).replace('.', DEC) : '');
     last.current = value;
   }, [value]); // eslint-disable-line
   return (
     <span className={`numinput ${readOnly ? 'ro' : ''}`} style={width ? { width } : undefined}>
       <input id={id} aria-label={aria} inputMode="decimal" value={txt} placeholder={placeholder} readOnly={readOnly}
         onChange={(e) => { const t = e.target.value.replace(/[^0-9.,\s]/g, ''); setTxt(t); const n = parseNum(t); last.current = n; onChange?.(n); }}
-        onBlur={() => { if (txt !== '') setTxt(String(parseNum(txt)).replace('.', ',')); }} />
+        onBlur={() => { if (txt !== '') setTxt(String(parseNum(txt)).replace('.', DEC)); }} />
       {suffix && <em>{suffix}</em>}
     </span>
   );

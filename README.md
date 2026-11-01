@@ -27,7 +27,7 @@ npm run install:all
 # MongoDB doit tourner sur 127.0.0.1:27017 (ou définissez MONGODB_URI dans server/.env)
 npm run dev:server          # API sur :4000 (compte dev : admin@flotte.local, mot de passe = ADMIN_PASSWORD de server/.env)
 npm run dev:client          # interface sur :5173 (proxy /api)
-npm run seed:demo           # 5 camions × 12 mois de données fictives (efface les données existantes !)
+npm run seed:demo           # jeu de démonstration complet, en anglais (efface les données existantes !)
 npm test                    # 31 tests (calcul, API, rôles, import, sauvegardes) — nécessite MongoDB (MONGODB_URI_TEST optionnel)
 ```
 
@@ -95,3 +95,18 @@ Depuis la page **Gasoil**, une surconsommation (ou une économie) peut être tra
 Documents véhicules (carte grise, assurance, visite technique, vignette…) avec **scan** (PDF/JPG/PNG/WEBP, 10 Mo) et alertes à 30 / 15 / 7 jours ; **disponibilité** (disponible, mission, location, maintenance, documents expirés) ; **calendrier** mensuel ; **locations de camions** (jour / heure / forfait) et rapport des heures ; **pannes** (une panne immobilisante rend le camion indisponible) ; **pièces & stock** avec seuil d'alerte. Fiche camion : type, capacité, places, mise en service.
 
 Les scans sont stockés dans `./uploads` (volume Docker) — **ils ne sont pas inclus dans les sauvegardes de l'application** : copiez ce dossier avec vos sauvegardes. Toutes les autres données (modules ci-dessus compris) sont dans les sauvegardes.
+
+## Langue (anglais / français)
+
+L'interface est **en anglais par défaut**. Le bouton « Français » (pied du menu latéral, et en haut de la page de connexion) bascule en français ; le choix est mémorisé dans le navigateur (`sf_lang`) et la page se recharge. Le bouton affiche toujours la langue cible.
+
+- Le texte de l'application est écrit en français dans le code ; en mode anglais, `client/src/i18n/` le traduit à l'affichage (dictionnaire `words.txt`, phrases à trous `patterns.txt`, messages d'erreur du serveur `server.txt`). Les dates, nombres, mois et le « montant en lettres » des factures suivent la langue.
+- Pour corriger ou ajouter une traduction : ajouter une ligne `Texte français => English text` dans l'un de ces fichiers (`{}` = valeur variable, réutilisable en sortie avec `{1}`, `{2}`…, et `{1|singulier|pluriel}`).
+- Les exports Excel / CSV générés par le serveur, les sauvegardes et les libellés enregistrés automatiquement en base (ex. « Règlement F-0001-2026 ») restent en français dans les fichiers ; à l'écran ils sont traduits.
+
+## Jeu de démonstration (`npm run seed:demo` / `seed-demo.bat`)
+
+Chaque module contient au moins 5 cas différents : 6 clients (délais 15/30/45/60 jours, TVA 20 %/10 %/0 %, un inactif), 5 fournisseurs, 5 sous-traitants (+ 6 véhicules), 17 missions (tous les statuts, internes/sous-traitées, tonnage/forfait, frais d'immobilisation, une mission en perte), 9 factures (payée, partielle, en retard, impayée, brouillon, annulée, payées par chèque/effet/espèces/virement/carte), 5 avoirs, 5 devis (brouillon → converti), 5 bons de livraison, 5 locations (jour/heure/forfait, tous statuts), 7 achats, 7 dépenses, caisse, 10 employés (CDI, CDD, ANAPEC, stage, journalier, horaire, un inactif), pointage de 3 mois, 5 avances, primes/retenues dont 2 issues du gasoil, paies de 3 mois (payée / validée / brouillon), 24 documents véhicules (dont 3 avec scan), 5 pannes, 7 pièces avec alertes de stock. Deux comptes de démonstration (`saisie@flotte.local`, `lecture@flotte.local`) sont créés ; leur mot de passe aléatoire est affiché une seule fois dans la sortie du seed.
+
+## Démo en ligne (Vercel)
+`vercel.json` publie le client seul en **mode démo** (`client/.env.demo`, `npm --prefix client run build:demo`) : aucune base ni serveur, données issues de `client/src/demoSnapshot.json` (enregistré sur le jeu `seed:demo`), modifications non conservées. Pour régénérer l'instantané : lancer le serveur sur une base peuplée par `seed:demo`, ouvrir chaque page de l'application, et enregistrer les réponses GET de `/api`. Version complète avec base : voir `deploy-fullstack/README.md`.

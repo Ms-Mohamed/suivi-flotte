@@ -6,12 +6,13 @@ import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Kpi, Modal, NumInput, Plate, Empty, Spinner, useToast } from '../components.jsx';
 import { dhs, n0, n2, fmtDateTime, monthShort, compact } from '../format.js';
+import { LOCALE } from '../i18n/lang.js';
 import { todayStr } from './OperationForm.jsx';
 
 export const CATEGORIES = { vidange: 'Vidange', moteur: 'Moteur', freins: 'Freins', pneus: 'Pneumatiques', transmission: 'Transmission', electricite: 'Électricité', carrosserie: 'Carrosserie', climatisation: 'Climatisation', remorque: 'Remorque', autre: 'Autre' };
 const TYPE = { preventive: 'Préventive', curative: 'Curative' };
 const PLAN_STATUT = { en_retard: ['neg', 'En retard'], bientot: ['warn', 'Bientôt'], ok: ['pos', 'À jour'], sans_historique: ['info', 'Sans historique'] };
-const fmtDay = (d) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }) : '—');
+const fmtDay = (d) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString(LOCALE, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }) : '—');
 const monthsAgo = (n) => { const d = new Date(); d.setMonth(d.getMonth() - n); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 const warnToast = (toast, list = []) => list.forEach((w) => toast(`Attention : « ${w.compte} » a déjà ${n2(w.montantFiche)} DHS dans la fiche de ${w.month}. L’intervention s’y ajoute : vérifiez qu’il n’y a pas de double comptage.`, 'err'));
 const TruckSelect = ({ value, onChange, list, autoFocus }) => (

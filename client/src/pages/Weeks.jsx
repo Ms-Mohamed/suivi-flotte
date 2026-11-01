@@ -6,10 +6,11 @@ import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import { Kpi, Delta, Plate, Spinner, Empty, useToast } from '../components.jsx';
 import { dhs, n0, compact, tone } from '../format.js';
+import { LOCALE } from '../i18n/lang.js';
 import OperationForm, { todayStr } from './OperationForm.jsx';
 
 const addDays = (s, n) => { const d = new Date(`${s}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
-const short = (s) => new Date(`${s}T00:00:00Z`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', timeZone: 'UTC' }).replace('.', '');
+const short = (s) => new Date(`${s}T00:00:00Z`).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', timeZone: 'UTC' }).replace('.', '');
 const NB = 8;
 
 export default function Weeks() {

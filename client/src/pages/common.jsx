@@ -6,8 +6,9 @@ import { Modal, Empty, Spinner, Kpi, NumInput, useToast } from '../components.js
 import { RefSelect, REFS, Pill } from '../crud.jsx';
 import { PrintPortal, TableSheet } from '../docs.jsx';
 import { n2, fmtDate, todayStr } from '../format.js';
+import { tr } from '../i18n/index.js';
 
-export const MODE_OPTS = [['especes', 'Espèces'], ['cheque', 'Chèque'], ['virement', 'Virement'], ['effet', 'Effet'], ['carte', 'Carte']];
+export const MODE_OPTS = [['especes', tr('Espèces')], ['cheque', tr('Chèque')], ['virement', tr('Virement')], ['effet', tr('Effet')], ['carte', tr('Carte')]];
 export const MODE_LABEL = Object.fromEntries(MODE_OPTS);
 export const REGL = { payee: ['Payée', 'pos'], partielle: ['Partielle', 'warn'], impayee: ['Impayée', 'neg'], en_retard: ['En retard', 'neg'], brouillon: ['Brouillon', ''], annulee: ['Annulée', ''], validee: ['Validée', 'info'] };
 export const ReglPill = ({ v }) => <Pill tone={REGL[v]?.[1] || ''}>{REGL[v]?.[0] || v}</Pill>;

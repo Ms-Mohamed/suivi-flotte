@@ -10,6 +10,7 @@ import { buildRouter } from './routes.js';
 export function createApp() {
   const app = express();
   app.disable('x-powered-by');
+  if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || 1);
   app.use(helmet({ contentSecurityPolicy: false }));
   app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : true }));
   app.use(express.json({ limit: '200kb' }));

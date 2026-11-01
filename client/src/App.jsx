@@ -1,7 +1,8 @@
 import React, { useEffect, useState, createContext, useContext } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Truck, FileBarChart2, Settings as Cog, LogOut, Menu, X, FileUp, Users as UsersIcon, ClipboardList, CalendarDays, ScrollText, Fuel, Wrench, Route as RouteIcon, CalendarRange, Gauge, Building2, Briefcase, FileText, Receipt, Wallet, Landmark, HandCoins, Package, ShoppingCart, Boxes, TriangleAlert, FileMinus, CreditCard, ChartColumn, UserCheck, Clock, Banknote, Handshake, Contact, ClipboardCheck, FolderOpen, Siren, ArrowLeftRight, Calculator, PiggyBank, TrendingUp, ChevronDown, ChevronRight, FileSpreadsheet, Hammer, PackageSearch, CalendarClock, Coins, Scale, Container } from 'lucide-react';
-import { api, getToken, setToken, setUnauthorizedHandler } from './api.js';
+import { api, getToken, setToken, setUnauthorizedHandler, DEMO } from './api.js';
+import ErrorBoundary from './ErrorBoundary.jsx';
 import { ToastProvider, Spinner } from './components.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
@@ -23,11 +24,12 @@ import * as ACH from './pages/Achats.jsx';
 import * as RH from './pages/RH.jsx';
 import * as FL from './pages/FleetExtra.jsx';
 import { ROLE_LABEL } from './format.js';
+import LangToggle from './LangToggle.jsx';
 
 const AppCtx = createContext(null);
 export const useApp = () => useContext(AppCtx);
 
-export const DEMO_USER = { id: 'demo', email: 'demo@flotte.local', nom: 'Visiteur (Démo)', role: 'admin', actif: true };
+export const DEMO_USER = { id: 'demo', email: 'demo@flotte.local', nom: 'Visiteur (démo)', role: 'admin', actif: true };
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -35,32 +37,14 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const nav = useNavigate();
 
-  const logout = () => { setToken(null); setUser(null); nav('/connexion'); };
+  const logout = () => { if (DEMO) { nav('/'); return; } setToken(null); setUser(null); nav('/connexion'); };
   useEffect(() => { setUnauthorizedHandler(logout); }); // eslint-disable-line
   useEffect(() => {
     (async () => {
-      try {
-        let u = null;
-        if (getToken()) {
-          try {
-            const res = await api('/auth/me');
-            u = res.user;
-          } catch {
-            setToken(null);
-          }
-        }
-        // Mode démo par défaut : accès direct sans mot de passe
-        if (!u) {
-          u = DEMO_USER;
-        }
-        setUser(u);
-        const s = await api('/settings').catch(() => null);
-        setSettings(s);
-      } catch {
-        setUser(DEMO_USER);
-      } finally {
-        setReady(true);
+      if (DEMO) { setUser(DEMO_USER); try { setSettings(await api('/settings')); } catch { /* ignore */ } } else if (getToken()) {
+        try { const [{ user }, s] = await Promise.all([api('/auth/me'), api('/settings')]); setUser(user); setSettings(s); } catch { setToken(null); }
       }
+      setReady(true);
     })();
   }, []);
 
@@ -137,11 +121,13 @@ function Shell() {
         </nav>
         <div className="sidebar-foot">
           <div className="me"><span className="avatar">{(user.nom || user.email)[0].toUpperCase()}</span><div><strong>{user.nom}</strong><small>{ROLE_LABEL[user.role]} · {user.email}</small></div></div>
+          <LangToggle />
           <button className="navlink" onClick={logout}><LogOut size={19} />Se déconnecter</button>
         </div>
       </aside>
       <main className="main">
-        <Routes>
+        {DEMO && <div className="demo-banner">Mode démo — les modifications ne sont pas enregistrées</div>}
+        <ErrorBoundary key={loc.pathname}><Routes>
           <Route index element={<Dashboard />} />
           <Route path="camions" element={<Trucks />} />
           <Route path="camion/:id" element={<TruckHistory />} />
@@ -188,7 +174,7 @@ function Shell() {
           <Route path="utilisateurs" element={user.role === 'admin' ? <Users /> : <Navigate to="/" replace />} />
           <Route path="parametres" element={user.role === 'admin' ? <Settings /> : <Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        </Routes></ErrorBoundary>
       </main>
     </div>
   );

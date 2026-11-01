@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Truck, LogIn } from 'lucide-react';
 import { api } from '../api.js';
+import LangToggle from '../LangToggle.jsx';
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
@@ -25,20 +26,13 @@ export default function Login({ onLogin }) {
         </ul>
       </div>
       <form className="login-card" onSubmit={submit}>
+        <div style={{ position: 'absolute', top: 14, right: 14 }}><LangToggle className="btn sm" /></div>
         <h2>Connexion</h2>
         <p className="muted">Accédez à votre espace de gestion.</p>
         <label className="field"><span>Email</span><input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus /></label>
         <label className="field"><span>Mot de passe</span><input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
         {err && <div className="form-error" role="alert">{err}</div>}
         <button className="btn primary block" disabled={busy}><LogIn size={18} />{busy ? 'Connexion…' : 'Se connecter'}</button>
-        <button
-          type="button"
-          className="btn secondary block"
-          style={{ marginTop: '0.75rem' }}
-          onClick={() => onLogin('demo-token', { id: 'demo', email: 'demo@flotte.local', nom: 'Visiteur (Démo)', role: 'admin', actif: true })}
-        >
-          Accéder à la démo (sans mot de passe)
-        </button>
       </form>
     </div>
   );

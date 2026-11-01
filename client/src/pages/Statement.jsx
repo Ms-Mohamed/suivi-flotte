@@ -7,6 +7,7 @@ import { PLAN, calcEntry, CODE_VENTES, CODE_GAZOLE, CODES_ANNUELS, OPS_CODES, MO
 import { useApp } from '../App.jsx';
 import { MonthPicker, NumInput, Segmented, Plate, Spinner, useToast } from '../components.jsx';
 import { dhs, n0, n2, monthLong, tone } from '../format.js';
+import { LOCALE } from '../i18n/lang.js';
 import OperationForm, { todayStr } from './OperationForm.jsx';
 
 const GCOL = { variables: '#2f5bea', fixes: '#12a594', amortissements: '#f5a524' };
@@ -214,7 +215,7 @@ const CalcRow = ({ label, formula, value, strong, big, signed }) => (
 );
 
 function SaveStatus({ status, at }) {
-  const hh = at ? at.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
+  const hh = at ? at.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' }) : '';
   if (status === 'saving') return <span className="save busy"><Loader2 size={15} className="spin" />Enregistrement…</span>;
   if (status === 'dirty') return <span className="save dirty">Modifications en cours…</span>;
   if (status === 'error') return <span className="save err"><AlertCircle size={15} />Non enregistré — réessayez</span>;
